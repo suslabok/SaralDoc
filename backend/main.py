@@ -10,9 +10,12 @@ from typing import List, Optional
 import PyPDF2
 from docx import Document
 import json
+import os
 
 # Import AI processor
 from processor import processor
+from analytics import analytics
+from history_db import history_db
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -111,6 +114,18 @@ async def analyze_text(request: AnalyzeRequest):
         # Calculate complexity
         complexity = processor.analyze_complexity(request.text)
         readability = processor.analyze_readability(request.text)
+        
+        # Save to history
+        history_db.add_analysis({
+            'document_name': 'Text Analysis',
+            'language': result.get('language', 'unknown'),
+            'clauses': result.get('clauses', []),
+            'obligations': result.get('obligations', []),
+            'entities': result.get('entities', []),
+            'complexity_score': complexity,
+            'readability_score': readability,
+            'summary': request.extract_summary and result.get("summary")
+        })
         
         # Format response
         return AnalyzeResponse(
@@ -228,7 +243,56 @@ async def analyze_file(file: UploadFile = File(...)):
                 raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, or TXT")
             
             # Analyze extracted text
-            return await analyze_text(AnalyzeRequest(text=text, extract_summary=True))
+            result = processor.extract_structure(text)
+            
+            # Calculate complexity
+            complexity = processor.analyze_complexity(text)
+            readability = processor.analyze_readability(text)
+            
+            # Save to history
+            history_db.add_analysis({
+                'document_name': filename,
+                'language': result.get('language', 'unknown'),
+                'clauses': result.get('clauses', []),
+                'obligations': result.get('obligations', []),
+                'entities': result.get('entities', []),
+                'complexity_score': complexity,
+                'readability_score': readability,
+                'summary': result.get("summary", "")
+            })
+            
+            return AnalyzeResponse(
+                success=True,
+                clauses=[
+                    ClauseResult(
+                        clause=c.get("text", ""),
+                        type=c.get("type", "clause"),
+                        confidence=c.get("confidence", 0.7)
+                    )
+                    for c in result.get("clauses", [])
+                ],
+                obligations=[
+                    ObligationResult(
+                        obligation=o.get("text", ""),
+                        type=o.get("type", "obligation"),
+                        language=o.get("language", "nepali"),
+                        confidence=o.get("confidence", 0.7)
+                    )
+                    for o in result.get("obligations", [])
+                ],
+                entities=[
+                    EntityResult(
+                        text=e.get("text", ""),
+                        type=e.get("type", "person"),
+                        confidence=e.get("confidence", 0.7)
+                    )
+                    for e in result.get("entities", [])
+                ],
+                language=result.get("language", "nepali"),
+                complexity_score=complexity,
+                readability_score=readability,
+                summary=result.get("summary")
+            )
             
         finally:
             # Clean up temp file
@@ -247,6 +311,90 @@ async def analyze_file(file: UploadFile = File(...)):
             readability_score=0,
             error=str(e)
         )
+
+# ============================================================================
+# HISTORY ENDPOINTS
+# ============================================================================
+
+@app.get("/history")
+async def get_history():
+    """Get all analysis history"""
+    try:
+        history = history_db.get_all_history()
+        return {
+            "success": True,
+            "history": history,
+            "total": len(history)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.get("/history/{analysis_id}")
+async def get_analysis(analysis_id: int):
+    """Get specific analysis by ID"""
+    try:
+        analysis = history_db.get_analysis_by_id(analysis_id)
+        if not analysis:
+            raise ValueError(f"Analysis {analysis_id} not found")
+        return {
+            "success": True,
+            "data": analysis
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.delete("/history/{analysis_id}")
+async def delete_analysis(analysis_id: int):
+    """Delete analysis by ID"""
+    try:
+        if history_db.delete_analysis(analysis_id):
+            return {
+                "success": True,
+                "message": f"Analysis {analysis_id} deleted"
+            }
+        else:
+            raise ValueError(f"Analysis {analysis_id} not found")
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.delete("/history")
+async def clear_history():
+    """Clear all history"""
+    try:
+        if history_db.clear_history():
+            return {
+                "success": True,
+                "message": "History cleared"
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.get("/history/stats")
+async def get_stats():
+    """Get history statistics"""
+    try:
+        stats = history_db.get_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 # ============================================================================
 # UTILITY ENDPOINTS
@@ -298,7 +446,12 @@ async def root():
             "analyze_file": "/analyze-file",
             "languages": "/languages",
             "models": "/models",
-            "docs": "/docs"
+            "docs": "/docs",
+            "history": "/history",
+            "history_id": "/history/{analysis_id}",
+            "delete_history_id": "/history/{analysis_id}",
+            "clear_history": "/history",
+            "history_stats": "/history/stats"
         }
     }
 

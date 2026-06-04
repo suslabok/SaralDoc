@@ -1,115 +1,238 @@
-import "./History.css";
+import { useState, useEffect } from "react";
 
 export default function History() {
-  const history = [
-    {
-      id: 1,
-      name: "Government Contract 001",
-      date: "2024-01-15",
-      clauses: 24,
-      status: "completed",
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const API = "http://localhost:8000";
+
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const fetchHistory = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API}/history`);
+      const data = await res.json();
+
+      if (data.success) setHistory(data.history || []);
+      else setError(data.error || "Failed to load history");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteItem = async (id) => {
+    await fetch(`${API}/history/${id}`, { method: "DELETE" });
+    setHistory((prev) => prev.filter((h) => h.id !== id));
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm("Clear all history?")) return;
+    await fetch(`${API}/history`, { method: "DELETE" });
+    setHistory([]);
+  };
+
+  const styles = {
+    page: {
+      padding: "30px",
+      minHeight: "100vh",
+      background: "#f5f7fa",
+      fontFamily: "sans-serif",
     },
-    {
-      id: 2,
-      name: "Employment Agreement",
-      date: "2024-01-14",
-      clauses: 18,
-      status: "completed",
+
+    header: {
+      textAlign: "center",
+      marginBottom: "20px",
     },
-    {
-      id: 3,
-      name: "Service Agreement",
-      date: "2024-01-13",
-      clauses: 15,
-      status: "completed",
+
+    title: {
+      fontSize: "28px",
+      fontWeight: "900",
+      background: "linear-gradient(135deg,#667eea,#764ba2)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
     },
-    {
-      id: 4,
-      name: "Loan Agreement",
-      date: "2024-01-12",
-      clauses: 32,
-      status: "completed",
+
+    clearBtn: {
+      marginTop: "10px",
+      padding: "8px 14px",
+      border: "none",
+      borderRadius: "8px",
+      background: "crimson",
+      color: "white",
+      cursor: "pointer",
     },
-    {
-      id: 5,
-      name: "Partnership Contract",
-      date: "2024-01-11",
-      clauses: 28,
-      status: "completed",
+
+    filters: {
+      display: "flex",
+      gap: "10px",
+      marginBottom: "15px",
     },
-  ];
+
+    input: {
+      flex: 1,
+      padding: "10px",
+      borderRadius: "8px",
+      border: "1px solid #ddd",
+    },
+
+    select: {
+      padding: "10px",
+      borderRadius: "8px",
+      border: "1px solid #ddd",
+    },
+
+    tableBox: {
+      background: "white",
+      borderRadius: "10px",
+      overflow: "hidden",
+      boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+    },
+
+    table: {
+      width: "100%",
+      borderCollapse: "collapse",
+    },
+
+    th: {
+      background: "linear-gradient(135deg,#667eea,#764ba2)",
+      color: "white",
+      padding: "12px",
+      textAlign: "left",
+    },
+
+    td: {
+      padding: "12px",
+      borderBottom: "1px solid #eee",
+    },
+
+    badge: {
+      background: "#eef2ff",
+      padding: "4px 10px",
+      borderRadius: "12px",
+      color: "#667eea",
+      fontWeight: "bold",
+    },
+
+    status: {
+      background: "#e6f7e6",
+      padding: "4px 10px",
+      borderRadius: "12px",
+      color: "green",
+      fontWeight: "bold",
+    },
+
+    deleteBtn: {
+      padding: "6px 10px",
+      border: "none",
+      background: "#ffdddd",
+      color: "#c00",
+      borderRadius: "6px",
+      cursor: "pointer",
+    },
+
+    stats: {
+      display: "flex",
+      gap: "10px",
+      marginTop: "20px",
+    },
+
+    card: {
+      flex: 1,
+      background: "white",
+      padding: "15px",
+      borderRadius: "10px",
+      textAlign: "center",
+    },
+
+    number: {
+      fontSize: "22px",
+      color: "#667eea",
+      fontWeight: "bold",
+    },
+  };
+
+  if (loading) return <div style={styles.page}>Loading...</div>;
 
   return (
-    <div className="page history-page">
-      <header className="page-header">
-        <h2>Analysis History</h2>
-        <p>View all previously analyzed documents</p>
-      </header>
+    <div style={styles.page}>
+      {/* HEADER */}
+      <div style={styles.header}>
+        <h2 style={styles.title}>Analysis History</h2>
+        <button style={styles.clearBtn} onClick={clearAll}>
+          Clear All
+        </button>
+      </div>
 
-      <div className="history-container">
-        <div className="filters">
-          <input
-            type="text"
-            placeholder="Search documents..."
-            className="search-input"
-          />
-          <select className="filter-select">
-            <option>All Documents</option>
-            <option>Contracts</option>
-            <option>Agreements</option>
-            <option>Policies</option>
-          </select>
-        </div>
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-        <div className="history-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Document Name</th>
-                <th>Date</th>
-                <th>Clauses Found</th>
-                <th>Status</th>
-                <th>Actions</th>
+      {/* FILTERS */}
+      <div style={styles.filters}>
+        <input style={styles.input} placeholder="Search..." />
+        <select style={styles.select}>
+          <option>All</option>
+          <option>Contracts</option>
+          <option>Agreements</option>
+        </select>
+      </div>
+
+      {/* TABLE */}
+      <div style={styles.tableBox}>
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={styles.th}>Document</th>
+              <th style={styles.th}>Date</th>
+              <th style={styles.th}>Clauses</th>
+              <th style={styles.th}>Status</th>
+              <th style={styles.th}>Action</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {history.map((item) => (
+              <tr key={item.id}>
+                <td style={styles.td}>📄 {item.name}</td>
+                <td style={styles.td}>
+                  {new Date(item.date).toLocaleDateString()}
+                </td>
+                <td style={styles.td}>
+                  <span style={styles.badge}>{item.clauses}</span>
+                </td>
+                <td style={styles.td}>
+                  <span style={styles.status}>{item.status}</span>
+                </td>
+                <td style={styles.td}>
+                  <button
+                    style={styles.deleteBtn}
+                    onClick={() => deleteItem(item.id)}
+                  >
+                    🗑
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {history.map((item) => (
-                <tr key={item.id}>
-                  <td className="doc-name">
-                    <span className="doc-icon">📄</span> {item.name}
-                  </td>
-                  <td>{item.date}</td>
-                  <td>
-                    <span className="clause-badge">{item.clauses}</span>
-                  </td>
-                  <td>
-                    <span className={`status-badge ${item.status}`}>
-                      ✓ {item.status}
-                    </span>
-                  </td>
-                  <td>
-                    <button className="action-btn view-btn">👁️ View</button>
-                    <button className="action-btn delete-btn">🗑️ Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* STATS */}
+      <div style={styles.stats}>
+        <div style={styles.card}>
+          <div style={styles.number}>{history.length}</div>
+          <p>Documents</p>
         </div>
 
-        <div className="history-stats">
-          <div className="stat">
-            <span className="stat-num">5</span>
-            <span className="stat-label">Documents Analyzed</span>
+        <div style={styles.card}>
+          <div style={styles.number}>
+            {history.reduce((a, b) => a + (b.clauses || 0), 0)}
           </div>
-          <div className="stat">
-            <span className="stat-num">117</span>
-            <span className="stat-label">Total Clauses</span>
-          </div>
-          <div className="stat">
-            <span className="stat-num">2.3s</span>
-            <span className="stat-label">Avg Processing Time</span>
-          </div>
+          <p>Total Clauses</p>
         </div>
       </div>
     </div>
