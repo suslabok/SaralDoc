@@ -167,8 +167,6 @@ export default function Sidebar({
           >
             {isCollapsed ? "➜" : "⬅"}
           </button>
-
-          {!isCollapsed && <div className="brand">SaralDoc</div>}
         </div>
 
         {/* NAV */}
