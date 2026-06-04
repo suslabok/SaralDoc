@@ -2,9 +2,7 @@ import { useState } from "react";
 import Navbar from "./components/Navbar";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
-import Analyzer from "./pages/Analyzer";
 import History from "./pages/History";
-import Settings from "./pages/Settings";
 import "./App.css";
 
 function App() {
@@ -13,31 +11,26 @@ function App() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case "dashboard":
-        return <Dashboard />;
-      case "analyzer":
-        return <Analyzer />;
       case "history":
         return <History />;
-      case "settings":
-        return <Settings />;
+      case "dashboard":
       default:
         return <Dashboard />;
     }
   };
 
   return (
-    <div className="app">
+    <div className={`app-root ${isCollapsed ? "sidebar-collapsed" : ""}`}>
       <Navbar />
+
       <Sidebar
-        onNavigate={setCurrentPage}
         currentPage={currentPage}
+        onNavigate={setCurrentPage}
         isCollapsed={isCollapsed}
-        onToggle={() => setIsCollapsed(!isCollapsed)}
+        onToggle={() => setIsCollapsed((prev) => !prev)}
       />
-      <main className={`main-content ${isCollapsed ? "collapsed" : ""}`}>
-        <div className="page-content">{renderPage()}</div>
-      </main>
+
+      <main className="main">{renderPage()}</main>
     </div>
   );
 }
