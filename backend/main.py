@@ -13,6 +13,7 @@ import json
 import os
 
 # Import AI processor
+import processor as processor_module
 from processor import processor
 from analytics import analytics
 from history_db import history_db
@@ -86,8 +87,8 @@ async def health_check():
         "message": "SaralDoc API is running",
         "version": "2.0.0",
         "models": {
-            "spacy": processor.HAS_SPACY,
-            "transformers": processor.HAS_TRANSFORMERS
+            "spacy": processor_module.HAS_SPACY,
+            "transformers": processor_module.HAS_TRANSFORMERS
         }
     }
 
@@ -332,6 +333,21 @@ async def get_history():
             "error": str(e)
         }
 
+@app.get("/history/stats")
+async def get_stats():
+    """Get history statistics"""
+    try:
+        stats = history_db.get_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 @app.get("/history/{analysis_id}")
 async def get_analysis(analysis_id: int):
     """Get specific analysis by ID"""
@@ -381,21 +397,6 @@ async def clear_history():
             "error": str(e)
         }
 
-@app.get("/history/stats")
-async def get_stats():
-    """Get history statistics"""
-    try:
-        stats = history_db.get_stats()
-        return {
-            "success": True,
-            "stats": stats
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
 # ============================================================================
 # UTILITY ENDPOINTS
 # ============================================================================
@@ -414,12 +415,12 @@ async def get_models_info():
     """Get information about loaded models"""
     return {
         "spacy": {
-            "enabled": processor.HAS_SPACY,
+            "enabled": processor_module.HAS_SPACY,
             "model": "en_core_web_sm",
             "purpose": "Named Entity Recognition"
         },
         "transformers": {
-            "enabled": processor.HAS_TRANSFORMERS,
+            "enabled": processor_module.HAS_TRANSFORMERS,
             "model": "xlm-roberta-base",
             "purpose": "Multi-language text classification"
         },
