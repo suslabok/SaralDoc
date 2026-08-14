@@ -1,16 +1,36 @@
 """
 Text Processing Module - AI-powered document analysis
-Handles Nepali and English text processing with NLP
+Handles Nepali and English text processing with NLP.
+
+Phase 2 upgrade notes
+----------------------
+Previously "AI" here meant regex + hardcoded keyword lists. This version adds:
+  - Real extractive summarization via TextRank (TF-IDF sentence graph + PageRank)
+  - Clause TYPE classification (obligation/payment/termination/etc.) via TF-IDF
+    cosine similarity against seed examples, instead of every sentence being
+    labeled generically "clause"
+  - Properly wired spaCy NER (was imported but silently unused before)
+  - An optional multilingual transformer NER pipeline for Nepali entities,
+    lazily loaded so a machine without internet/GPU still works fine in
+    regex+TF-IDF-only mode (everything above needs no external model download)
+
+Everything degrades gracefully: if a heavier model isn't available, the
+pipeline falls back to the next tier down rather than crashing.
 """
 
 import re
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import string
 
-# Try importing NLP libraries
+# ============================================================================
+# OPTIONAL DEPENDENCY DETECTION (graceful degradation at every tier)
+# ============================================================================
+
 HAS_SPACY = False
 HAS_TRANSFORMERS = False
+HAS_SKLEARN = False
+HAS_NETWORKX = False
 
 try:
     import spacy
@@ -25,13 +45,207 @@ except ImportError:
     pass
 
 try:
-    import nltk
-    from nltk.tokenize import sent_tokenize
-    from nltk.corpus import stopwords
-    nltk.download('punkt', quiet=True)
-    nltk.download('stopwords', quiet=True)
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
+    HAS_SKLEARN = True
 except ImportError:
     pass
+
+try:
+    import joblib
+    HAS_JOBLIB = True
+except ImportError:
+    HAS_JOBLIB = False
+    joblib = None
+
+try:
+    import networkx as nx
+    HAS_NETWORKX = True
+except ImportError:
+    pass
+
+_MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+_TRAINED_CLASSIFIER_PATH = os.path.join(_MODEL_DIR, "clause_classifier.joblib")
+
+
+# ============================================================================
+# CLAUSE TAXONOMY — seed examples used for TF-IDF similarity classification
+# (bilingual: English + Nepali). This replaces "everything is just a clause".
+# ============================================================================
+
+CLAUSE_CATEGORIES: Dict[str, List[str]] = {
+    "obligation": [
+        "The employee shall submit the monthly report on time.",
+        "The party must comply with all applicable laws and regulations.",
+        "The contractor is required to complete the work within the stipulated time.",
+        "The tenant shall maintain the property in good condition.",
+        "पक्षले यो सम्झौता अनुसार काम गर्नु पर्दछ ।",
+        "कर्मचारीले मासिक प्रतिवेदन पेश गर्नु अनिवार्य छ ।",
+        "ठेकेदारले तोकिएको समयभित्र काम सम्पन्न गर्नुपर्छ ।",
+    ],
+    "payment": [
+        "The buyer shall pay the total amount within thirty days of invoice.",
+        "Payment shall be made in full upon delivery of goods.",
+        "A late fee of two percent per month will apply to overdue payments.",
+        "The salary shall be paid monthly in advance.",
+        "खरिदकर्ताले तोकिएको रकम तिर्नु पर्नेछ ।",
+        "भुक्तानी सम्झौता भएको मितिले तीस दिनभित्र गर्नुपर्छ ।",
+        "तलब प्रत्येक महिनाको अन्तिम दिन भुक्तानी गरिनेछ ।",
+    ],
+    "termination": [
+        "This agreement may be terminated by either party with thirty days written notice.",
+        "The contract shall automatically terminate upon completion of the project.",
+        "Either party may terminate this agreement for material breach of contract.",
+        "This lease may be cancelled by giving one month's prior notice.",
+        "यो सम्झौता कुनै पनि पक्षले लिखित सूचना दिई खारेज गर्न सक्नेछ ।",
+        "सम्झौता उल्लंघन भएमा अर्को पक्षले करार रद्द गर्न सक्नेछ ।",
+    ],
+    "confidentiality": [
+        "The parties agree to keep all information disclosed under this agreement confidential.",
+        "Neither party shall disclose proprietary or confidential information to third parties.",
+        "All trade secrets shared under this agreement shall remain confidential indefinitely.",
+        "गोप्य जानकारी अरु कसैलाई खुलासा गर्न पाइने छैन ।",
+        "यस सम्झौता अन्तर्गतको जानकारी गोप्य राखिनेछ ।",
+    ],
+    "penalty": [
+        "Failure to comply with this clause will result in a penalty equal to ten percent of contract value.",
+        "Any breach of this agreement shall attract a fine as determined under applicable law.",
+        "Late delivery shall be subject to liquidated damages.",
+        "उल्लंघन गरेमा जरिवाना लाग्नेछ ।",
+        "करार भंग गरेमा क्षतिपूर्ति तिर्नुपर्नेछ ।",
+    ],
+    "indemnity": [
+        "The contractor shall indemnify and hold harmless the client against all claims and damages.",
+        "Each party agrees to hold the other harmless from any losses arising out of this agreement.",
+        "The supplier shall be liable for any damage caused by defective goods.",
+    ],
+    "definition": [
+        "For the purposes of this agreement, 'party' means either the buyer or the seller.",
+        "The term 'goods' refers to all items listed in Schedule A of this contract.",
+        "'Effective date' means the date on which this agreement is signed by both parties.",
+        "यस सम्झौताको प्रयोजनको लागि 'पक्ष' भन्नाले खरिदकर्ता वा बिक्रेता जनाउँछ ।",
+    ],
+    "governing_law": [
+        "This agreement shall be governed by and construed in accordance with the laws of Nepal.",
+        "Any dispute arising from this contract shall be subject to the exclusive jurisdiction of Nepali courts.",
+        "This contract shall be interpreted under the applicable law of the country.",
+    ],
+}
+
+_STOPWORD_SAFE_TOKEN_PATTERN = r"(?u)\b[\w\u0900-\u097F]+\b"
+
+
+class ClauseClassifier:
+    """
+    Clause type classifier. Prefers a trained TF-IDF + Logistic Regression
+    model (models/clause_classifier.joblib, produced by trainer.py) if one
+    exists. Falls back to TF-IDF cosine similarity against hand-written
+    seed examples if no trained model is present — e.g. a fresh checkout
+    where `python trainer.py` hasn't been run yet. Either way this needs no
+    external model download and works identically for English and Nepali.
+    """
+
+    CONFIDENCE_FLOOR = 0.08  # below this, label as "general" rather than guess
+
+    def __init__(self):
+        self.trained_model = None
+        self.using_trained_model = False
+
+        if HAS_JOBLIB and os.path.exists(_TRAINED_CLASSIFIER_PATH):
+            try:
+                self.trained_model = joblib.load(_TRAINED_CLASSIFIER_PATH)
+                self.using_trained_model = True
+            except Exception as e:
+                print(f"Could not load trained clause classifier, falling back to seed similarity: {e}")
+
+        self.available = HAS_SKLEARN
+        if not self.available:
+            return
+
+        self.labels: List[str] = []
+        self.seed_texts: List[str] = []
+        for category, examples in CLAUSE_CATEGORIES.items():
+            for ex in examples:
+                self.labels.append(category)
+                self.seed_texts.append(ex)
+
+        self.vectorizer = TfidfVectorizer(
+            token_pattern=_STOPWORD_SAFE_TOKEN_PATTERN,
+            ngram_range=(1, 2),
+            sublinear_tf=True,
+        )
+        self._seed_matrix = self.vectorizer.fit_transform(self.seed_texts)
+
+    def classify(self, sentence: str) -> Tuple[str, float]:
+        """Return (best_category, confidence 0-1). Falls back to 'general'."""
+        if not sentence.strip():
+            return "general", 0.0
+
+        if self.using_trained_model:
+            try:
+                proba = self.trained_model.predict_proba([sentence])[0]
+                classes = self.trained_model.classes_
+                best_idx = int(np.argmax(proba)) if HAS_SKLEARN else max(range(len(proba)), key=lambda i: proba[i])
+                return classes[best_idx], round(float(proba[best_idx]), 3)
+            except Exception:
+                pass  # fall through to seed-similarity approach
+
+        if not self.available:
+            return "general", 0.0
+
+        vec = self.vectorizer.transform([sentence])
+        sims = cosine_similarity(vec, self._seed_matrix)[0]
+        best_idx = int(np.argmax(sims))
+        best_score = float(sims[best_idx])
+
+        if best_score < self.CONFIDENCE_FLOOR:
+            return "general", round(best_score, 3)
+
+        return self.labels[best_idx], round(min(best_score * 1.6, 0.98), 3)
+
+
+class TextRankSummarizer:
+    """
+    Extractive summarizer: builds a sentence-similarity graph (TF-IDF cosine)
+    and ranks sentences with PageRank, then returns the top-N sentences in
+    their original order. Standard TextRank approach — no model download,
+    works for English and Nepali alike.
+    """
+
+    def __init__(self):
+        self.available = HAS_SKLEARN and HAS_NETWORKX
+
+    def summarize(self, sentences: List[str], top_n: int = 3, max_chars: int = 400) -> str:
+        clean = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 3]
+
+        if not clean:
+            return ""
+        if len(clean) <= top_n:
+            summary = " ".join(clean)
+            return summary if len(summary) <= max_chars else summary[: max_chars - 3] + "..."
+
+        if not self.available:
+            summary = " ".join(clean[:top_n])
+            return summary if len(summary) <= max_chars else summary[: max_chars - 3] + "..."
+
+        try:
+            vectorizer = TfidfVectorizer(token_pattern=_STOPWORD_SAFE_TOKEN_PATTERN)
+            matrix = vectorizer.fit_transform(clean)
+            sim_matrix = cosine_similarity(matrix)
+
+            graph = nx.from_numpy_array(sim_matrix)
+            scores = nx.pagerank(graph, max_iter=200)
+
+            ranked_idx = sorted(scores, key=scores.get, reverse=True)[:top_n]
+            ranked_idx.sort()  # restore original reading order
+
+            summary = " ".join(clean[i] for i in ranked_idx)
+            return summary if len(summary) <= max_chars else summary[: max_chars - 3] + "..."
+        except Exception:
+            summary = " ".join(clean[:top_n])
+            return summary if len(summary) <= max_chars else summary[: max_chars - 3] + "..."
+
 
 # ============================================================================
 # PROCESSOR CLASS
@@ -39,67 +253,105 @@ except ImportError:
 
 class TextProcessor:
     """Main text processing engine"""
-    
+
+    # Multilingual NER model: covers Nepali + English + many other languages.
+    # Downloaded lazily on first use of Nepali/mixed-text entity extraction —
+    # NOT at startup — so the app boots instantly even offline. If the
+    # download fails (no internet, blocked registry, etc.) we cache that
+    # failure and silently fall back to regex-only entity extraction.
+    MULTILINGUAL_NER_MODEL = "Davlan/xlm-roberta-base-ner-hrl"
+
     def __init__(self):
         """Initialize processor with available models"""
         self.spacy_model = None
-        self.transformer = None
+        self._transformer_ner = None
+        self._transformer_ner_load_failed = False
+        self.clause_classifier = ClauseClassifier()
+        self.summarizer = TextRankSummarizer()
         self.initialize_models()
-    
+
     def initialize_models(self):
-        """Load spaCy and Transformer models"""
+        """Load spaCy eagerly (small/fast/local). Transformer NER stays lazy."""
         if HAS_SPACY:
             try:
                 self.spacy_model = spacy.load("en_core_web_sm")
             except OSError:
-                print("⚠️  spaCy model not found. Download with: python -m spacy download en_core_web_sm")
-    
+                print("spaCy model not found. Download with: python -m spacy download en_core_web_sm")
+
+    def _get_transformer_ner(self):
+        """Lazily load the multilingual transformer NER pipeline, once."""
+        if not HAS_TRANSFORMERS or self._transformer_ner_load_failed:
+            return None
+        if self._transformer_ner is not None:
+            return self._transformer_ner
+        try:
+            self._transformer_ner = pipeline(
+                "ner",
+                model=self.MULTILINGUAL_NER_MODEL,
+                aggregation_strategy="simple",
+            )
+        except Exception as e:
+            print(f"Multilingual NER model unavailable, falling back to regex/spaCy only: {e}")
+            self._transformer_ner_load_failed = True
+            self._transformer_ner = None
+        return self._transformer_ner
+
     def detect_language(self, text: str) -> str:
         """Detect if text is Nepali, English, or Mixed"""
         nepali_chars = re.findall(r'[\u0900-\u097F]', text)
         english_chars = re.findall(r'[a-zA-Z]', text)
-        
+
         nepali_ratio = len(nepali_chars) / len(text) if text else 0
         english_ratio = len(english_chars) / len(text) if text else 0
-        
+
         if nepali_ratio > 0.5:
             return "nepali"
         elif english_ratio > 0.5:
             return "english"
         else:
             return "mixed"
-    
+
+    # Splits after Nepali danda/!/? always, and after '.' only when it's
+    # preceded by a lowercase letter/digit and followed by whitespace +
+    # an uppercase/Devanagari letter — avoids shredding "Rs. 50,000",
+    # "U.S.", decimals, etc. while still correctly splitting English
+    # sentences (previous version only split on Nepali punctuation and
+    # silently treated whole English paragraphs as a single "sentence").
+    _SENTENCE_SPLIT_PATTERN = re.compile(
+        r'(?<=[।!?])\s+|(?<=[a-z0-9)])\.\s+(?=[A-Z\u0900-\u097F])'
+    )
+
+    def _split_sentences(self, text: str) -> List[str]:
+        parts = self._SENTENCE_SPLIT_PATTERN.split(text.strip())
+        return [s.strip() for s in parts if s.strip() and len(s.strip()) > 10]
+
     def extract_clauses(self, text: str) -> List[Dict[str, Any]]:
-        """Extract clauses/sentences from document"""
-        # Split by sentences
-        sentences = re.split(r'[।।!?]\s*', text)
-        sentences = [s.strip() for s in sentences if s.strip() and len(s.strip()) > 10]
-        
+        """Extract clauses/sentences from document, classified by legal type"""
+        sentences = self._split_sentences(text)
+
         clauses = []
-        for sentence in sentences[:50]:  # Limit to 50 clauses
+        for sentence in sentences[:50]:
+            category, confidence = self.clause_classifier.classify(sentence)
             clauses.append({
                 "text": sentence,
-                "type": "clause",
-                "confidence": 0.85
+                "type": category,
+                "confidence": confidence if confidence > 0 else 0.5,
             })
-        
+
         return clauses
-    
+
     def extract_obligations(self, text: str) -> List[Dict[str, Any]]:
         """Extract obligations/requirements from document"""
         obligations = []
-        
-        # English obligation patterns
+
         english_patterns = [
-            r'(?:shall|must|should|will|require|mandate|obligate)\s+([^.!?।।]+)',
-            r'([^.!?।।]+?)\s+(?:is required|is mandatory|must be)',
-            r'(?:obligation|duty|responsibility|must)\s+(?:is|to)?\s+([^.!?।।]+)',
+            r'(?:shall|must|should|will|require|mandate|obligate)\s+([^.!?।]+)',
+            r'([^.!?।]+?)\s+(?:is required|is mandatory|must be)',
+            r'(?:obligation|duty|responsibility|must)\s+(?:is|to)?\s+([^.!?।]+)',
         ]
-        
-        # Nepali obligation keywords
+
         nepali_keywords = ['गरनु पर्दछ', 'गर्नु अनिवार्य', 'आवश्यक', 'दायित्व', 'गर्नु जरुरी', 'गरिनेछ', 'गर्न सक्दैन']
-        
-        # English patterns
+
         for pattern in english_patterns:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
@@ -111,10 +363,9 @@ class TextProcessor:
                         "language": "english",
                         "confidence": 0.8
                     })
-        
-        # Nepali patterns
+
         for keyword in nepali_keywords:
-            matches = re.finditer(r'([^.!?।।]*' + re.escape(keyword) + r'[^.!?।।]*)', text)
+            matches = re.finditer(r'([^.!?।]*' + re.escape(keyword) + r'[^.!?।]*)', text)
             for match in matches:
                 obligation_text = match.group(1).strip()
                 if obligation_text and len(obligation_text) > 5:
@@ -124,173 +375,186 @@ class TextProcessor:
                         "language": "nepali",
                         "confidence": 0.8
                     })
-        
-        # Remove duplicates
+
+        # Cross-check against the TF-IDF classifier: sentences it independently
+        # flags as "obligation" but the regex missed get added too (lower
+        # confidence, since only one signal caught them).
+        if self.clause_classifier.available:
+            for sentence in self._split_sentences(text):
+                category, confidence = self.clause_classifier.classify(sentence)
+                if category == "obligation" and confidence > 0.15:
+                    already_found = any(sentence in o["text"] or o["text"] in sentence for o in obligations)
+                    if not already_found:
+                        obligations.append({
+                            "text": sentence,
+                            "type": "obligation",
+                            "language": self.detect_language(sentence),
+                            "confidence": round(confidence, 2)
+                        })
+
         seen = set()
         unique_obligations = []
         for obl in obligations:
             if obl["text"] not in seen:
                 seen.add(obl["text"])
                 unique_obligations.append(obl)
-        
-        return unique_obligations[:30]  # Limit to 30
-    
+
+        return unique_obligations[:30]
+
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """Extract named entities (people, organizations, amounts, dates)"""
         entities = []
-        
-        # Use spaCy if available
-        if self.spacy_model:
-            doc = self.spacy_model(text[:1000])  # Limit text for performance
+        language = self.detect_language(text)
+
+        if self.spacy_model and language in ("english", "mixed"):
+            doc = self.spacy_model(text[:2000])
             for ent in doc.ents:
                 entities.append({
                     "text": ent.text,
                     "type": ent.label_.lower(),
-                    "confidence": 0.85
+                    "confidence": 0.85,
+                    "source": "spacy",
                 })
-        
-        # Extract amounts (numbers with currency)
+
+        if language in ("nepali", "mixed"):
+            ner = self._get_transformer_ner()
+            if ner:
+                try:
+                    for ent in ner(text[:2000]):
+                        entities.append({
+                            "text": ent["word"],
+                            "type": ent["entity_group"].lower(),
+                            "confidence": round(float(ent["score"]), 2),
+                            "source": "transformer",
+                        })
+                except Exception:
+                    pass
+
         amount_pattern = r'(?:Rs\.?|NPR|USD|\$|₹)?\s*(\d+(?:,\d{3})*(?:\.\d{2})?)'
         for match in re.finditer(amount_pattern, text):
             amount = match.group(0).strip()
             entities.append({
                 "text": amount,
                 "type": "amount",
-                "confidence": 0.9
+                "confidence": 0.9,
+                "source": "regex",
             })
-        
-        # Extract dates
+
         date_pattern = r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})'
         for match in re.finditer(date_pattern, text):
-            date = match.group(0)
             entities.append({
-                "text": date,
+                "text": match.group(0),
                 "type": "date",
-                "confidence": 0.9
+                "confidence": 0.9,
+                "source": "regex",
             })
-        
-        # Remove duplicates
+
         seen = set()
         unique_entities = []
         for ent in entities:
-            if ent["text"] not in seen:
-                seen.add(ent["text"])
+            key = (ent["text"], ent["type"])
+            if key not in seen:
+                seen.add(key)
                 unique_entities.append(ent)
-        
-        return unique_entities[:20]  # Limit to 20
-    
+
+        return unique_entities[:20]
+
     def analyze_complexity(self, text: str) -> int:
         """Analyze document complexity (0-100)"""
         words = len(text.split())
-        sentences = len(re.split(r'[।।!?]', text))
+        sentences = len(self._split_sentences(text)) or 1
         avg_word_length = len(text.replace(" ", "")) / max(words, 1)
-        
-        # Score based on factors
+
         score = 0
-        
-        # Word count factor (more words = more complex)
+
         if words > 500:
             score += 25
         elif words > 300:
             score += 20
         elif words > 100:
             score += 10
-        
-        # Average word length (longer words = more complex)
+
         if avg_word_length > 6:
             score += 25
         elif avg_word_length > 5:
             score += 15
-        
-        # Sentence complexity
+
         if sentences > 0:
             avg_sentence_length = words / sentences
             if avg_sentence_length > 20:
                 score += 25
             elif avg_sentence_length > 15:
                 score += 15
-        
-        # Specialized vocabulary
-        legal_terms = ['law', 'agreement', 'liability', 'obligation', 'clause', 'अधिनियम', 'समझौता']
+
+        legal_terms = ['law', 'agreement', 'liability', 'obligation', 'clause',
+                        'indemnify', 'whereas', 'thereof', 'herein',
+                        'अधिनियम', 'समझौता', 'दायित्व', 'करार']
         for term in legal_terms:
             if term.lower() in text.lower():
                 score += 5
-        
+
         return min(score, 100)
-    
+
     def analyze_readability(self, text: str) -> int:
         """Analyze document readability (0-100, higher is more readable)"""
         words = len(text.split())
-        sentences = len(re.split(r'[।।!?]', text))
-        
+        sentences = len(self._split_sentences(text)) or 1
+
         if words == 0:
             return 0
-        
-        # Flesch Kincaid inspired scoring
+
         avg_words_per_sentence = words / max(sentences, 1)
         avg_syllables = sum(self.count_syllables(word) for word in text.split()) / words
-        
-        # Calculate score (inverted from complexity)
+
         score = 100
-        
-        # Penalty for long sentences
+
         if avg_words_per_sentence > 25:
             score -= 30
         elif avg_words_per_sentence > 20:
             score -= 20
         elif avg_words_per_sentence > 15:
             score -= 10
-        
-        # Penalty for long words
+
         if avg_syllables > 3:
             score -= 20
         elif avg_syllables > 2.5:
             score -= 10
-        
+
         return max(score, 0)
-    
+
     def count_syllables(self, word: str) -> int:
-        """Estimate syllable count in a word"""
+        """Estimate syllable count in a word (Latin-script heuristic)"""
         word = word.lower()
         syllables = 0
-        vowels = "aeiououy"
+        vowels = "aeiouy"
         previous_was_vowel = False
-        
+
         for char in word:
             is_vowel = char in vowels
             if is_vowel and not previous_was_vowel:
                 syllables += 1
             previous_was_vowel = is_vowel
-        
+
         if word.endswith("e"):
             syllables -= 1
         if word.endswith("le") and len(word) > 2 and word[-3] not in vowels:
             syllables += 1
-        
+
         return max(syllables, 1)
-    
+
     def generate_summary(self, text: str) -> str:
-        """Generate a brief summary of the document"""
-        sentences = re.split(r'[।।!?]', text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-        
-        if len(sentences) <= 2:
-            return text
-        
-        # Take first 1-2 sentences as summary
-        summary = ' '.join(sentences[:2])
-        if len(summary) > 200:
-            summary = summary[:197] + "..."
-        
-        return summary
-    
+        """Generate an extractive summary via TextRank (falls back to
+        leading sentences if sklearn/networkx aren't installed)."""
+        sentences = self._split_sentences(text)
+        return self.summarizer.summarize(sentences, top_n=3, max_chars=400)
+
     def extract_structure(self, text: str) -> Dict[str, Any]:
         """Main processing function - extracts all information"""
         language = self.detect_language(text)
         clauses = self.extract_clauses(text)
         obligations = self.extract_obligations(text)
         entities = self.extract_entities(text)
-        
+
         return {
             "language": language,
             "clauses": clauses,
@@ -322,4 +586,3 @@ def analyze_readability(text: str) -> int:
 def detect_language(text: str) -> str:
     """Public API: Detect language"""
     return processor.detect_language(text)
-

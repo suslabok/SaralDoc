@@ -412,21 +412,40 @@ async def get_supported_languages():
 
 @app.get("/models")
 async def get_models_info():
-    """Get information about loaded models"""
+    """Get information about loaded/available models"""
+    import json as _json
+    from pathlib import Path as _Path
+
+    clause_model_info = {
+        "enabled": processor.clause_classifier.using_trained_model,
+        "type": "TF-IDF + Logistic Regression" if processor.clause_classifier.using_trained_model
+                else "TF-IDF cosine similarity (seed examples, no trained model found)",
+        "purpose": "Legal clause type classification",
+    }
+    metadata_path = _Path(__file__).parent / "models" / "model_metadata.json"
+    if metadata_path.exists():
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                clause_model_info["training_metadata"] = _json.load(f)
+        except Exception:
+            pass
+
     return {
         "spacy": {
             "enabled": processor_module.HAS_SPACY,
             "model": "en_core_web_sm",
-            "purpose": "Named Entity Recognition"
+            "purpose": "English named entity recognition"
         },
         "transformers": {
             "enabled": processor_module.HAS_TRANSFORMERS,
             "model": "xlm-roberta-base",
             "purpose": "Multi-language text classification"
         },
-        "nltk": {
-            "enabled": True,
-            "purpose": "Text processing & analysis"
+        "clause_classifier": clause_model_info,
+        "summarizer": {
+            "enabled": processor.summarizer.available,
+            "type": "TextRank (TF-IDF sentence graph + PageRank)",
+            "purpose": "Extractive summarization"
         }
     }
 
