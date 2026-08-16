@@ -1,31 +1,31 @@
 {
   "model_type": "TF-IDF + Logistic Regression",
-  "training_samples": 128,
-  "test_samples": 32,
-  "total_samples": 160,
+  "training_samples": 1019,
+  "test_samples": 255,
+  "total_samples": 1274,
   "classes": [
-    "confidentiality",
-    "definition",
+    "audit_rights",
     "general",
     "governing_law",
-    "indemnity",
-    "obligation",
-    "payment",
+    "insurance",
+    "liability_cap",
+    "license_grant",
+    "non_compete",
     "penalty",
     "termination"
   ],
-  "accuracy": 0.9062,
+  "accuracy": 0.898,
   "per_class_f1": {
-    "confidentiality": 1.0,
-    "definition": 0.8571,
-    "general": 1.0,
-    "governing_law": 0.6667,
-    "indemnity": 1.0,
-    "obligation": 0.9333,
-    "payment": 0.9091,
-    "penalty": 0.8,
-    "termination": 0.8571
+    "audit_rights": 0.8814,
+    "general": 0.6923,
+    "governing_law": 0.9831,
+    "insurance": 0.9677,
+    "liability_cap": 0.8667,
+    "license_grant": 0.9831,
+    "non_compete": 0.8889,
+    "penalty": 0.8947,
+    "termination": 0.8966
   },
-  "macro_avg_f1": 0.8915,
-  "weighted_avg_f1": 0.9004
+  "macro_avg_f1": 0.8949,
+  "weighted_avg_f1": 0.8981
 }

@@ -1,55 +1,6 @@
-/* ================= THEME VARIABLES ================= */
 :root {
   --sidebar-width: 280px;
   --sidebar-width-collapsed: 80px;
-
-  --bg: #ffffff;
-  --text: #111111;
-  --muted: #6b7280;
-
-  --card: #f5f7fa;
-  --border: #e5e7eb;
-
-  --primary: #4f46e5;
-  --gradient: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
-}
-
-/* DARK MODE */
-:root[data-theme="dark"] {
-  --bg: #0f0f0f;
-  --text: #ffffff;
-  --muted: #9ca3af;
-
-  --card: #1a1a1a;
-  --border: #2a2a2a;
-
-  --primary: #6366f1;
-  --gradient: linear-gradient(135deg, #0f0f0f 0%, #111827 100%);
-}
-
-/* ================= RESET ================= */
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* ================= BASE ================= */
-html,
-body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, sans-serif;
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  transition: all 0.3s ease;
-}
-
-#root {
-  width: 100%;
-  min-height: 100vh;
 }
 
 /* ================= APP LAYOUT ================= */
@@ -59,33 +10,14 @@ body {
   height: 100vh;
 }
 
-/* ================= NAVBAR ================= */
-.navbar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 70px;
-  z-index: 99;
-}
-
-/* ================= SIDEBAR ================= */
-.sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 100;
-}
-
 /* ================= MAIN CONTENT ================= */
 .main {
   flex: 1;
   margin-left: var(--sidebar-width);
   margin-top: 70px;
-  padding: 20px;
+  padding: 24px;
 
-  background: var(--gradient);
+  background: var(--bg-primary);
   transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -96,31 +28,6 @@ body {
 /* ================= PAGE ANIMATION ================= */
 .page-content {
   animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ================= INPUT FIX ================= */
-input,
-textarea,
-select {
-  font-size: 16px;
-  background: var(--card);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 8px;
-  border-radius: 8px;
-  outline: none;
-  transition: all 0.3s ease;
 }
 
 /* ================= MOBILE ================= */

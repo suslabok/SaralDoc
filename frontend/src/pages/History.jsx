@@ -41,8 +41,8 @@ export default function History() {
     page: {
       padding: "30px",
       minHeight: "100vh",
-      background: "#f5f7fa",
-      fontFamily: "sans-serif",
+      background: "var(--bg-primary)",
+      fontFamily: "var(--font-body)",
     },
 
     header: {
@@ -51,20 +51,20 @@ export default function History() {
     },
 
     title: {
-      fontSize: "28px",
-      fontWeight: "900",
-      background: "linear-gradient(135deg,#667eea,#764ba2)",
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent",
+      fontFamily: "var(--font-heading)",
+      fontSize: "26px",
+      fontWeight: "600",
+      color: "var(--text-primary)",
     },
 
     clearBtn: {
       marginTop: "10px",
-      padding: "8px 14px",
-      border: "none",
-      borderRadius: "8px",
-      background: "crimson",
-      color: "white",
+      padding: "8px 16px",
+      border: "1px solid var(--border-active)",
+      borderRadius: "6px",
+      background: "transparent",
+      color: "var(--primary)",
+      fontWeight: "600",
       cursor: "pointer",
     },
 
@@ -77,21 +77,26 @@ export default function History() {
     input: {
       flex: 1,
       padding: "10px",
-      borderRadius: "8px",
-      border: "1px solid #ddd",
+      borderRadius: "6px",
+      border: "1px solid var(--border)",
+      background: "var(--bg-card)",
+      color: "var(--text-primary)",
     },
 
     select: {
       padding: "10px",
-      borderRadius: "8px",
-      border: "1px solid #ddd",
+      borderRadius: "6px",
+      border: "1px solid var(--border)",
+      background: "var(--bg-card)",
+      color: "var(--text-primary)",
     },
 
     tableBox: {
-      background: "white",
+      background: "var(--bg-card)",
       borderRadius: "10px",
       overflow: "hidden",
-      boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
+      border: "1px solid var(--border)",
+      boxShadow: "var(--shadow-sm)",
     },
 
     table: {
@@ -100,38 +105,43 @@ export default function History() {
     },
 
     th: {
-      background: "linear-gradient(135deg,#667eea,#764ba2)",
-      color: "white",
+      background: "var(--text-primary)",
+      color: "var(--bg-card)",
       padding: "12px",
       textAlign: "left",
+      fontWeight: "600",
+      fontSize: "0.9em",
     },
 
     td: {
       padding: "12px",
-      borderBottom: "1px solid #eee",
+      borderBottom: "1px solid var(--border)",
+      color: "var(--text-primary)",
     },
 
     badge: {
-      background: "#eef2ff",
+      background: "rgba(168,73,46,0.1)",
       padding: "4px 10px",
-      borderRadius: "12px",
-      color: "#667eea",
-      fontWeight: "bold",
+      borderRadius: "999px",
+      color: "var(--primary)",
+      fontWeight: "600",
+      fontSize: "0.85em",
     },
 
     status: {
-      background: "#e6f7e6",
+      background: "rgba(63,92,74,0.12)",
       padding: "4px 10px",
-      borderRadius: "12px",
-      color: "green",
-      fontWeight: "bold",
+      borderRadius: "999px",
+      color: "var(--secondary)",
+      fontWeight: "600",
+      fontSize: "0.85em",
     },
 
     deleteBtn: {
       padding: "6px 10px",
-      border: "none",
-      background: "#ffdddd",
-      color: "#c00",
+      border: "1px solid var(--border-active)",
+      background: "transparent",
+      color: "var(--primary)",
       borderRadius: "6px",
       cursor: "pointer",
     },
@@ -144,16 +154,18 @@ export default function History() {
 
     card: {
       flex: 1,
-      background: "white",
+      background: "var(--bg-card)",
       padding: "15px",
       borderRadius: "10px",
+      border: "1px solid var(--border)",
       textAlign: "center",
     },
 
     number: {
+      fontFamily: "var(--font-heading)",
       fontSize: "22px",
-      color: "#667eea",
-      fontWeight: "bold",
+      color: "var(--primary)",
+      fontWeight: "600",
     },
   };
 

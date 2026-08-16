@@ -10,6 +10,7 @@ backend/__pycache__/
 backend/*.pyc
 backend/.env
 backend/.DS_Store
+backend/datasets/raw/
 
 # IDE
 .vscode/

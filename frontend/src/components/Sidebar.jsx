@@ -26,37 +26,21 @@ export default function Sidebar({
   return (
     <>
       <style>{`
-        /* ================= THEME ================= */
-        :root {
-          --bg: #ffffff;
-          --text: #111111;
-          --card: #f5f5f5;
-          --border: #e0e0e0;
-          --primary: #4f46e5;
-        }
-
-        :root[data-theme="dark"] {
-          --bg: #0f0f0f;
-          --text: #ffffff;
-          --card: #1a1a1a;
-          --border: #2a2a2a;
-          --primary: #6366f1;
-        }
-
-        /* ================= SIDEBAR ================= */
+        /* SIDEBAR - uses global tokens from main.css */
         .sidebar {
           position: fixed;
           top: 70px;
           left: 0;
           height: calc(100vh - 70px);
           width: 260px;
-          background: var(--card);
-          color: var(--text);
+          background: var(--bg-card);
+          color: var(--text-primary);
           border-right: 1px solid var(--border);
           display: flex;
           flex-direction: column;
-          transition: all 0.3s ease;
+          transition: width 0.3s ease;
           overflow: hidden;
+          z-index: 98;
         }
 
         .sidebar.collapsed {
@@ -67,7 +51,7 @@ export default function Sidebar({
         .sidebar-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-end;
           padding: 14px;
           border-bottom: 1px solid var(--border);
         }
@@ -75,21 +59,16 @@ export default function Sidebar({
         .sidebar-toggle {
           width: 38px;
           height: 38px;
-          border-radius: 10px;
+          border-radius: var(--radius-sm);
           border: 1px solid var(--border);
-          background: var(--bg);
-          color: var(--text);
+          background: var(--bg-primary);
+          color: var(--text-primary);
           cursor: pointer;
-          transition: 0.3s ease;
+          transition: border-color 0.2s ease;
         }
 
         .sidebar-toggle:hover {
-          transform: scale(1.05);
-        }
-
-        .brand {
-          font-weight: 700;
-          font-size: 1.1rem;
+          border-color: var(--border-active);
         }
 
         /* NAV */
@@ -97,7 +76,7 @@ export default function Sidebar({
           display: flex;
           flex-direction: column;
           padding: 10px;
-          gap: 8px;
+          gap: 6px;
           flex: 1;
         }
 
@@ -106,34 +85,33 @@ export default function Sidebar({
           align-items: center;
           gap: 12px;
           padding: 10px 12px;
-          border-radius: 10px;
+          border-radius: var(--radius-sm);
           border: none;
           background: transparent;
-          color: var(--text);
+          color: var(--text-secondary);
           cursor: pointer;
-          transition: all 0.25s ease;
+          transition: all 0.2s ease;
           font-size: 0.95rem;
+          font-family: var(--font-body);
+          text-align: left;
         }
 
         .sidebar-link:hover {
-          background: var(--bg);
+          background: var(--bg-primary);
+          color: var(--text-primary);
         }
 
         .sidebar-link.active {
           background: var(--primary);
-          color: white;
+          color: #faf8f3;
         }
 
         .sidebar-icon {
-          font-size: 1.2rem;
+          font-size: 1.15rem;
         }
 
         /* Hide text when collapsed */
         .sidebar.collapsed .sidebar-link-text {
-          display: none;
-        }
-
-        .sidebar.collapsed .brand {
           display: none;
         }
 
@@ -145,15 +123,8 @@ export default function Sidebar({
         }
 
         .version {
-          font-size: 0.8rem;
-          opacity: 0.6;
-        }
-
-        /* SMOOTH TRANSITIONS */
-        .sidebar,
-        .sidebar-link,
-        .sidebar-toggle {
-          transition: all 0.3s ease;
+          font-size: 0.78rem;
+          color: var(--text-muted);
         }
       `}</style>
 
@@ -187,11 +158,6 @@ export default function Sidebar({
             );
           })}
         </nav>
-
-        {/* FOOTER */}
-        <div className="sidebar-footer">
-          <div className="version">v2.0</div>
-        </div>
       </aside>
     </>
   );

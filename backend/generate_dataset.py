@@ -39,7 +39,10 @@ TERMS = ["party", "goods", "effective date", "confidential information", "agreem
 MEANINGS = ["either the buyer or the seller", "all items listed in the attached schedule",
             "the date on which this agreement is signed", "any non-public business data",
             "this written contract and its appendices"]
-JURISDICTIONS = ["Nepal", "the applicable jurisdiction", "the courts of Kathmandu"]
+JURISDICTIONS = ["Nepal", "the applicable jurisdiction", "the courts of Kathmandu",
+                  "the courts of Nepal", "the federal law of Nepal",
+                  "the jurisdiction where the agreement was signed",
+                  "the competent courts having jurisdiction over this matter"]
 
 OBLIGATION_TEMPLATES = [
     "The {party} shall {duty}.",
@@ -83,6 +86,9 @@ GOVERNING_LAW_TEMPLATES = [
     "This agreement shall be governed by the laws of {jurisdiction}.",
     "Any dispute arising from this contract shall be subject to the jurisdiction of {jurisdiction}.",
     "This contract shall be interpreted in accordance with the law of {jurisdiction}.",
+    "The parties submit to the exclusive jurisdiction of {jurisdiction}.",
+    "All disputes shall be resolved in accordance with the laws of {jurisdiction}.",
+    "This agreement is governed by and construed under the laws of {jurisdiction}.",
 ]
 GENERAL_SENTENCES = [
     "The meeting was held in the main conference room.",

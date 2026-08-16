@@ -2,60 +2,28 @@ import { useState, useRef, useEffect } from "react";
 
 // ── All styles inlined ────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Hind:wght@400;500;600;700&family=Lora:ital,wght@0,500;0,600;1,400&display=swap');
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --accent:      #667eea;
-    --accent2:     #764ba2;
-    --dark:        #1a1b2e;
-    --muted:       #7f8c8d;
-    --border:      #e0e6ed;
-    --bg:          linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
-    --card-shadow: 0 10px 40px rgba(0,0,0,0.08);
-    --radius:      20px;
-    --font-display:'Syne', sans-serif;
-    --font-body:   'DM Sans', sans-serif;
-  }
-
-  body { font-family: var(--font-body); }
 
   @keyframes fadeIn    { from { opacity:0; transform:translateY(10px);  } to { opacity:1; transform:translateY(0); } }
   @keyframes slideInUp { from { opacity:0; transform:translateY(20px);  } to { opacity:1; transform:translateY(0); } }
   @keyframes slideInDn { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes float     { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-12px); } }
+  @keyframes float     { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-8px); } }
   @keyframes spin      { to { transform:rotate(360deg); } }
   @keyframes barGrow   { from { width:0; } }
 
   /* ── Root ── */
   .sd-root {
     min-height: 100vh;
-    background: var(--bg);
+    background: var(--bg-primary);
     font-family: var(--font-body);
     animation: fadeIn 0.3s ease-out;
   }
 
-  /* ── Banner ── */
-  .sd-banner {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
-    padding: 48px 40px;
-    text-align: center;
-    color: white;
-    box-shadow: 0 15px 40px rgba(102,126,234,0.3);
-  }
-  .sd-banner h1 {
-    font-family: var(--font-display);
-    font-size: 2.8em;
-    font-weight: 900;
-    letter-spacing: -0.5px;
-    margin-bottom: 10px;
-  }
-  .sd-banner p { font-size: 1.1em; opacity: 0.92; font-weight: 500; }
-
   /* ── Page body ── */
   .sd-body {
-    padding: 40px;
+    padding: 48px 40px 40px;
     max-width: 1400px;
     margin: 0 auto;
   }
@@ -69,176 +37,174 @@ const css = `
   }
   .sd-stat {
     background: white;
-    padding: 28px;
+    padding: 26px;
     border-radius: var(--radius);
-    box-shadow: var(--card-shadow);
-    border: 2px solid transparent;
-    transition: all 0.3s ease;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
-    animation: slideInUp 0.5s ease-out;
+    animation: slideInUp 0.4s ease-out;
   }
   .sd-stat::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    height: 3px;
+    background: var(--primary);
     transform: scaleX(0);
     transform-origin: left;
-    transition: transform 0.3s ease;
+    transition: transform 0.2s ease;
   }
-  .sd-stat:hover { transform: translateY(-6px); box-shadow: 0 15px 40px rgba(102,126,234,0.18); border-color: var(--accent); }
+  .sd-stat:hover { transform: translateY(-4px); box-shadow: var(--shadow); border-color: var(--primary); }
   .sd-stat:hover::before { transform: scaleX(1); }
-  .sd-stat-icon { font-size: 2.4em; margin-bottom: 10px; display: block; }
-  .sd-stat-num  { font-family: var(--font-display); font-size: 2.2em; font-weight: 800; color: var(--accent); }
-  .sd-stat-lbl  { color: var(--muted); font-size: 0.9em; font-weight: 600; margin-top: 4px; }
+  .sd-stat-icon { font-size: 2.2em; margin-bottom: 10px; display: block; }
+  .sd-stat-num  { font-family: var(--font-heading); font-size: 2em; font-weight: 600; color: var(--primary); }
+  .sd-stat-lbl  { color: var(--text-secondary); font-size: 0.88em; font-weight: 500; margin-top: 4px; }
 
   /* ── Main grid ── */
   .sd-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 32px;
+    gap: 28px;
   }
   @media (max-width: 1024px) { .sd-grid { grid-template-columns: 1fr; } }
 
   /* ── Cards ── */
   .sd-card {
     background: white;
-    padding: 38px;
+    padding: 34px;
     border-radius: var(--radius);
-    box-shadow: var(--card-shadow);
-    border: 1px solid rgba(102,126,234,0.1);
-    animation: slideInUp 0.5s ease-out;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    animation: slideInUp 0.4s ease-out;
   }
   .sd-card-title {
-    font-family: var(--font-display);
-    font-size: 1.25em;
-    font-weight: 800;
-    color: var(--dark);
+    font-family: var(--font-heading);
+    font-size: 1.2em;
+    font-weight: 600;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     gap: 10px;
     padding-bottom: 14px;
     margin-bottom: 22px;
-    border-bottom: 3px solid var(--accent);
+    border-bottom: 2px solid var(--primary);
   }
 
   /* ── Tabs ── */
-  .sd-tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 22px; }
+  .sd-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
   .sd-tab {
-    padding: 10px 18px;
+    padding: 9px 16px;
     background: transparent;
-    border: 2px solid var(--border);
-    color: var(--muted);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
     font-family: var(--font-body);
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
-    border-radius: 10px;
-    transition: all 0.25s ease;
-    font-size: 0.93em;
+    border-radius: var(--radius-sm, 6px);
+    transition: all 0.2s ease;
+    font-size: 0.92em;
   }
-  .sd-tab:hover { border-color: var(--accent); color: var(--accent); }
+  .sd-tab:hover { border-color: var(--primary); color: var(--primary); }
   .sd-tab.active {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white;
-    border-color: transparent;
-    box-shadow: 0 8px 20px rgba(102,126,234,0.28);
+    background: var(--primary);
+    color: #faf8f3;
+    border-color: var(--primary);
   }
 
   /* ── Error alert ── */
   .sd-error {
     display: flex; align-items: flex-start; gap: 10px;
-    background: #fee; border: 2px solid #fcc;
-    border-radius: 12px; padding: 14px;
+    background: rgba(168,73,46,0.08); border: 1px solid rgba(168,73,46,0.25);
+    border-radius: 8px; padding: 14px;
     margin-bottom: 18px;
     animation: slideInDn 0.3s ease-out;
   }
-  .sd-error p { color: #c33; margin: 0; flex: 1; font-size: 0.93em; }
-  .sd-error button { background: none; border: none; color: #c33; font-size: 1.2em; cursor: pointer; }
+  .sd-error p { color: var(--primary); margin: 0; flex: 1; font-size: 0.93em; }
+  .sd-error button { background: none; border: none; color: var(--primary); font-size: 1.2em; cursor: pointer; }
 
   /* ── Upload zone ── */
   .sd-upload {
-    border: 3px dashed var(--accent);
-    border-radius: 16px;
-    padding: 55px 30px;
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 50px 30px;
     text-align: center;
-    background: linear-gradient(135deg, rgba(102,126,234,0.05), rgba(118,75,162,0.03));
-    transition: all 0.3s ease;
+    background: var(--bg-primary);
+    transition: all 0.2s ease;
     margin-bottom: 22px;
     cursor: pointer;
   }
   .sd-upload.drag-over {
-    border-color: var(--accent2);
-    background: linear-gradient(135deg, rgba(102,126,234,0.13), rgba(118,75,162,0.08));
-    transform: scale(1.02);
-    box-shadow: 0 12px 36px rgba(102,126,234,0.18);
+    border-color: var(--primary);
+    background: rgba(168,73,46,0.05);
+    box-shadow: var(--shadow);
   }
-  .sd-upload-icon { font-size: 3.2em; display: block; margin-bottom: 12px; animation: float 3s ease-in-out infinite; }
-  .sd-upload h3 { font-size: 1.2em; color: var(--dark); margin-bottom: 6px; }
-  .sd-upload p  { color: var(--muted); font-size: 0.9em; margin: 4px 0; }
-  .sd-upload-hint { font-size: 0.85em; color: #aaa; }
+  .sd-upload-icon { font-size: 3em; display: block; margin-bottom: 12px; animation: float 3s ease-in-out infinite; }
+  .sd-upload h3 { font-size: 1.15em; color: var(--text-primary); margin-bottom: 6px; font-family: var(--font-heading); font-weight: 600; }
+  .sd-upload p  { color: var(--text-secondary); font-size: 0.9em; margin: 4px 0; }
+  .sd-upload-hint { font-size: 0.85em; color: var(--text-secondary); opacity: 0.8; }
 
   .sd-browse {
-    margin-top: 16px; padding: 11px 28px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white; border: none; border-radius: 10px;
-    font-weight: 700; cursor: pointer;
+    margin-top: 16px; padding: 10px 26px;
+    background: var(--primary);
+    color: #faf8f3; border: none; border-radius: var(--radius-sm, 6px);
+    font-weight: 600; cursor: pointer;
     font-family: var(--font-body);
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
   }
-  .sd-browse:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(102,126,234,0.3); }
+  .sd-browse:hover { background: var(--primary-hover); }
 
   .sd-file-chip {
     display: flex; align-items: center; justify-content: space-between;
     margin-top: 14px; padding: 10px 14px;
-    background: #e8f1ff; border-radius: 10px;
-    color: var(--accent); font-weight: 600; font-size: 0.9em;
+    background: rgba(168,73,46,0.08); border-radius: var(--radius-sm, 6px);
+    color: var(--primary); font-weight: 600; font-size: 0.9em;
   }
-  .sd-file-chip button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 1.1em; }
+  .sd-file-chip button { background: none; border: none; color: var(--primary); cursor: pointer; font-size: 1.1em; }
 
   /* ── Textarea ── */
   .sd-textarea {
     width: 100%; min-height: 280px;
-    padding: 18px; border: 2px solid var(--border);
-    border-radius: 12px; font-family: 'Courier New', monospace;
+    padding: 18px; border: 1px solid var(--border);
+    border-radius: 8px; font-family: var(--font-body, monospace);
     font-size: 0.94em; resize: vertical; line-height: 1.65;
-    transition: all 0.3s ease; margin-bottom: 22px;
-    color: var(--dark);
+    transition: all 0.2s ease; margin-bottom: 22px;
+    color: var(--text-primary);
   }
-  .sd-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 20px rgba(102,126,234,0.15); }
-  .sd-textarea::placeholder { color: #bbb; }
+  .sd-textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(168,73,46,0.1); }
+  .sd-textarea::placeholder { color: var(--text-secondary); opacity: 0.6; }
 
   /* ── Action buttons ── */
   .sd-actions { display: flex; gap: 14px; }
   .sd-btn-primary, .sd-btn-secondary {
-    flex: 1; padding: 14px 20px; border: none;
-    border-radius: 10px; font-weight: 700;
+    flex: 1; padding: 13px 20px; border: none;
+    border-radius: var(--radius-sm, 6px); font-weight: 600;
     font-size: 0.95em; cursor: pointer;
     font-family: var(--font-body);
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
   }
-  .sd-btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
-  .sd-btn-primary:hover:not(:disabled)   { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(102,126,234,0.32); }
-  .sd-btn-secondary { background: white; border: 2px solid var(--accent); color: var(--accent); }
-  .sd-btn-secondary:hover:not(:disabled) { background: var(--accent); color: white; }
+  .sd-btn-primary { background: var(--primary); color: #faf8f3; }
+  .sd-btn-primary:hover:not(:disabled)   { background: var(--primary-hover); }
+  .sd-btn-secondary { background: white; border: 1px solid var(--primary); color: var(--primary); }
+  .sd-btn-secondary:hover:not(:disabled) { background: var(--primary); color: #faf8f3; }
   .sd-btn-primary:disabled, .sd-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ── Empty state ── */
-  .sd-empty { text-align: center; padding: 60px 20px; color: var(--muted); }
-  .sd-empty-icon { font-size: 4em; display: block; margin-bottom: 16px; }
-  .sd-empty strong { display: block; font-size: 1.1em; color: var(--dark); margin-bottom: 6px; }
+  .sd-empty { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+  .sd-empty-icon { font-size: 3.5em; display: block; margin-bottom: 16px; opacity: 0.7; }
+  .sd-empty strong { display: block; font-size: 1.1em; color: var(--text-primary); margin-bottom: 6px; font-family: var(--font-heading); }
 
   /* ── Loading spinner ── */
   .sd-loading { text-align: center; padding: 50px 20px; }
   .sd-spinner {
-    width: 42px; height: 42px; margin: 0 auto 16px;
-    border: 4px solid rgba(102,126,234,0.2);
-    border-top-color: var(--accent);
+    width: 40px; height: 40px; margin: 0 auto 16px;
+    border: 3px solid rgba(168,73,46,0.15);
+    border-top-color: var(--primary);
     border-radius: 50%;
     animation: spin 0.75s linear infinite;
   }
-  .sd-loading p { color: var(--muted); font-weight: 600; }
+  .sd-loading p { color: var(--text-secondary); font-weight: 500; }
 
   /* ── Result items ── */
   .sd-results {
@@ -250,72 +216,62 @@ const css = `
   .sd-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
   .sd-result-item {
-    background: linear-gradient(135deg, #f9faff, #f5f2ff);
-    padding: 16px; border-left: 5px solid var(--accent);
-    border-radius: 10px; transition: all 0.25s ease;
+    background: var(--bg-primary);
+    padding: 16px; border-left: 4px solid var(--primary);
+    border-radius: 8px; transition: all 0.2s ease;
   }
-  .sd-result-item:hover { transform: translateX(4px); box-shadow: 0 6px 20px rgba(102,126,234,0.12); }
-  .sd-result-item.obligation { border-left-color: #f39c12; background: linear-gradient(135deg, #fffaf0, #fff5e6); }
+  .sd-result-item:hover { transform: translateX(3px); }
+  .sd-result-item.obligation { border-left-color: var(--amber, #c08a34); background: rgba(192,138,52,0.06); }
 
   .sd-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
   .sd-badge {
     padding: 3px 10px; border-radius: 6px;
-    font-size: 0.82em; font-weight: 700;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white;
+    font-size: 0.82em; font-weight: 600;
+    background: var(--primary);
+    color: #faf8f3;
   }
-  .sd-badge.obl  { background: linear-gradient(135deg, #f39c12, #e67e22); }
-  .sd-badge.conf { background: rgba(102,126,234,0.1); color: var(--accent); }
-  .sd-item-text  { color: var(--dark); line-height: 1.65; font-size: 0.95em; }
-  .sd-item-meta  { color: var(--muted); font-size: 0.83em; margin-top: 6px; }
+  .sd-badge.obl  { background: var(--amber, #c08a34); }
+  .sd-badge.conf { background: rgba(168,73,46,0.1); color: var(--primary); }
+  .sd-item-text  { color: var(--text-primary); line-height: 1.65; font-size: 0.95em; }
+  .sd-item-meta  { color: var(--text-secondary); font-size: 0.83em; margin-top: 6px; }
 
   /* ── Entities ── */
   .sd-entity {
     display: flex; align-items: center; gap: 12px;
-    padding: 11px 14px; background: #f9faff;
-    border-radius: 10px; border: 2px solid var(--border);
-    transition: all 0.25s ease;
+    padding: 11px 14px; background: var(--bg-primary);
+    border-radius: 8px; border: 1px solid var(--border);
+    transition: all 0.2s ease;
   }
-  .sd-entity:hover { border-color: var(--accent); background: #f0f4ff; }
+  .sd-entity:hover { border-color: var(--primary); }
   .sd-entity-badge {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white; padding: 3px 12px; border-radius: 20px;
-    font-size: 0.78em; font-weight: 700; white-space: nowrap;
+    background: var(--secondary);
+    color: #faf8f3; padding: 3px 12px; border-radius: 999px;
+    font-size: 0.78em; font-weight: 600; white-space: nowrap;
   }
-  .sd-entity-text { flex: 1; color: var(--dark); font-weight: 600; font-size: 0.94em; }
-  .sd-entity-conf { color: var(--accent); font-weight: 700; font-size: 0.88em; }
+  .sd-entity-text { flex: 1; color: var(--text-primary); font-weight: 500; font-size: 0.94em; }
+  .sd-entity-conf { color: var(--primary); font-weight: 600; font-size: 0.88em; }
 
   /* ── Summary ── */
   .sd-summary { display: flex; flex-direction: column; gap: 18px; }
   .sd-summary-card {
-    background: linear-gradient(135deg, #f9faff, #f5f2ff);
-    padding: 22px; border-radius: 12px;
-    border-left: 5px solid var(--accent);
+    background: var(--bg-primary);
+    padding: 22px; border-radius: 8px;
+    border-left: 4px solid var(--primary);
   }
-  .sd-summary-card h4 { color: var(--dark); margin-bottom: 14px; font-family: var(--font-display); font-size: 1.05em; }
+  .sd-summary-card h4 { color: var(--text-primary); margin-bottom: 14px; font-family: var(--font-heading); font-size: 1.05em; font-weight: 600; }
   .sd-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 14px; }
   .sd-summary-item { display: flex; flex-direction: column; gap: 5px; }
-  .sd-summary-item .lbl { color: var(--muted); font-size: 0.87em; font-weight: 600; }
-  .sd-summary-item .val { color: var(--accent); font-family: var(--font-display); font-size: 1.5em; font-weight: 800; }
-  .sd-score-bar-bg { height: 8px; background: #e0e6ed; border-radius: 4px; overflow: hidden; margin-top: 6px; }
-  .sd-score-bar    { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); animation: barGrow 0.8s ease-out; }
-  .sd-summary-text { background: #f9faff; border: 1px solid var(--border); border-radius: 10px; padding: 16px; color: var(--dark); line-height: 1.7; font-size: 0.95em; }
+  .sd-summary-item .lbl { color: var(--text-secondary); font-size: 0.87em; font-weight: 500; }
+  .sd-summary-item .val { color: var(--primary); font-family: var(--font-heading); font-size: 1.4em; font-weight: 600; }
+  .sd-score-bar-bg { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 6px; }
+  .sd-score-bar    { height: 100%; border-radius: 4px; background: var(--primary); animation: barGrow 0.8s ease-out; }
+  .sd-summary-text { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text-primary); line-height: 1.7; font-size: 0.95em; }
 
-  .sd-no-results { text-align: center; padding: 30px 20px; color: var(--muted); font-size: 0.93em; }
-
-  /* ── Footer ── */
-  .sd-footer {
-    margin-top: 40px; padding: 18px 24px;
-    background: linear-gradient(135deg, rgba(102,126,234,0.08), rgba(118,75,162,0.08));
-    border-radius: 12px; border-left: 4px solid var(--accent);
-    text-align: center; color: var(--muted); font-size: 0.9em;
-  }
+  .sd-no-results { text-align: center; padding: 30px 20px; color: var(--text-secondary); font-size: 0.93em; }
 
   /* ── Responsive ── */
   @media (max-width: 768px) {
-    .sd-body     { padding: 20px; }
-    .sd-banner   { padding: 30px 20px; }
-    .sd-banner h1 { font-size: 2em; }
+    .sd-body     { padding: 24px 20px; }
     .sd-card     { padding: 24px; }
     .sd-actions  { flex-direction: column; }
     .sd-summary-grid { grid-template-columns: 1fr; }
@@ -427,7 +383,8 @@ function SummaryPanel({ results }) {
                   className="sd-score-bar"
                   style={{
                     width: `${read}%`,
-                    background: "linear-gradient(90deg,#2ecc71,#27ae60)",
+                    background:
+                      "linear-gradient(90deg, var(--risk-low), var(--secondary))",
                   }}
                 />
               </div>
@@ -584,15 +541,6 @@ export default function SaralDoc() {
 
   return (
     <div className="sd-root">
-      {/* ── Banner ── */}
-      <div className="sd-banner">
-        <h1>📄 SaralDoc</h1>
-        <p>
-          AI-powered Nepali / English legal document analyzer — get insights
-          instantly
-        </p>
-      </div>
-
       <div className="sd-body">
         {/* ── Stats row ── */}
         <div className="sd-stats">
@@ -819,12 +767,6 @@ export default function SaralDoc() {
               </>
             )}
           </div>
-        </div>
-
-        {/* ── Footer ── */}
-        <div className="sd-footer">
-          🚀 SaralDoc — AI-powered legal document analysis. Results are
-          informational only and do not constitute legal advice.
         </div>
       </div>
     </div>

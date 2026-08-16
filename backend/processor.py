@@ -23,10 +23,6 @@ import os
 from typing import List, Dict, Any, Tuple
 import string
 
-# ============================================================================
-# OPTIONAL DEPENDENCY DETECTION (graceful degradation at every tier)
-# ============================================================================
-
 HAS_SPACY = False
 HAS_TRANSFORMERS = False
 HAS_SKLEARN = False
@@ -68,68 +64,49 @@ except ImportError:
 _MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
 _TRAINED_CLASSIFIER_PATH = os.path.join(_MODEL_DIR, "clause_classifier.joblib")
 
-
-# ============================================================================
-# CLAUSE TAXONOMY — seed examples used for TF-IDF similarity classification
-# (bilingual: English + Nepali). This replaces "everything is just a clause".
-# ============================================================================
-
 CLAUSE_CATEGORIES: Dict[str, List[str]] = {
-    "obligation": [
-        "The employee shall submit the monthly report on time.",
-        "The party must comply with all applicable laws and regulations.",
-        "The contractor is required to complete the work within the stipulated time.",
-        "The tenant shall maintain the property in good condition.",
-        "पक्षले यो सम्झौता अनुसार काम गर्नु पर्दछ ।",
-        "कर्मचारीले मासिक प्रतिवेदन पेश गर्नु अनिवार्य छ ।",
-        "ठेकेदारले तोकिएको समयभित्र काम सम्पन्न गर्नुपर्छ ।",
-    ],
-    "payment": [
-        "The buyer shall pay the total amount within thirty days of invoice.",
-        "Payment shall be made in full upon delivery of goods.",
-        "A late fee of two percent per month will apply to overdue payments.",
-        "The salary shall be paid monthly in advance.",
-        "खरिदकर्ताले तोकिएको रकम तिर्नु पर्नेछ ।",
-        "भुक्तानी सम्झौता भएको मितिले तीस दिनभित्र गर्नुपर्छ ।",
-        "तलब प्रत्येक महिनाको अन्तिम दिन भुक्तानी गरिनेछ ।",
+    "governing_law": [
+        "This agreement shall be governed by and construed in accordance with the laws of Nepal.",
+        "Any dispute arising from this contract shall be subject to the exclusive jurisdiction of Nepali courts.",
+        "This contract shall be interpreted under the applicable law of the country.",
+        "This agreement shall be governed by, and construed in accordance with, the laws of the State of New York.",
     ],
     "termination": [
         "This agreement may be terminated by either party with thirty days written notice.",
+        "Either party may terminate this agreement for convenience upon sixty days prior written notice.",
+        "This agreement shall continue in force for a term of twelve months from the effective date, unless terminated earlier.",
         "The contract shall automatically terminate upon completion of the project.",
-        "Either party may terminate this agreement for material breach of contract.",
-        "This lease may be cancelled by giving one month's prior notice.",
-        "यो सम्झौता कुनै पनि पक्षले लिखित सूचना दिई खारेज गर्न सक्नेछ ।",
-        "सम्झौता उल्लंघन भएमा अर्को पक्षले करार रद्द गर्न सक्नेछ ।",
-    ],
-    "confidentiality": [
-        "The parties agree to keep all information disclosed under this agreement confidential.",
-        "Neither party shall disclose proprietary or confidential information to third parties.",
-        "All trade secrets shared under this agreement shall remain confidential indefinitely.",
-        "गोप्य जानकारी अरु कसैलाई खुलासा गर्न पाइने छैन ।",
-        "यस सम्झौता अन्तर्गतको जानकारी गोप्य राखिनेछ ।",
     ],
     "penalty": [
         "Failure to comply with this clause will result in a penalty equal to ten percent of contract value.",
         "Any breach of this agreement shall attract a fine as determined under applicable law.",
         "Late delivery shall be subject to liquidated damages.",
-        "उल्लंघन गरेमा जरिवाना लाग्नेछ ।",
-        "करार भंग गरेमा क्षतिपूर्ति तिर्नुपर्नेछ ।",
+        "In the event of a material breach, the breaching party shall pay liquidated damages as specified herein.",
     ],
-    "indemnity": [
-        "The contractor shall indemnify and hold harmless the client against all claims and damages.",
-        "Each party agrees to hold the other harmless from any losses arising out of this agreement.",
-        "The supplier shall be liable for any damage caused by defective goods.",
+    "license_grant": [
+        "Subject to the terms of this Agreement, Licensor hereby grants to Licensee a non-exclusive license to use the Licensed Technology.",
+        "Each party grants to the other a non-exclusive right and license to use the intellectual property described herein.",
+        "The Company hereby grants to Customer a limited, non-transferable license to use the Software.",
     ],
-    "definition": [
-        "For the purposes of this agreement, 'party' means either the buyer or the seller.",
-        "The term 'goods' refers to all items listed in Schedule A of this contract.",
-        "'Effective date' means the date on which this agreement is signed by both parties.",
-        "यस सम्झौताको प्रयोजनको लागि 'पक्ष' भन्नाले खरिदकर्ता वा बिक्रेता जनाउँछ ।",
+    "liability_cap": [
+        "Neither party's aggregate liability under this Agreement shall exceed the total fees paid in the preceding twelve months.",
+        "Each party's total liability arising out of this Agreement shall not exceed the amount paid under this Agreement.",
+        "In no event shall either party be liable for any indirect, incidental, or consequential damages.",
     ],
-    "governing_law": [
-        "This agreement shall be governed by and construed in accordance with the laws of Nepal.",
-        "Any dispute arising from this contract shall be subject to the exclusive jurisdiction of Nepali courts.",
-        "This contract shall be interpreted under the applicable law of the country.",
+    "insurance": [
+        "Each party shall maintain commercial general liability insurance with coverage of at least one million dollars.",
+        "The Contractor shall maintain insurance policies as required under this Agreement throughout the term.",
+        "Each policy will include a provision requiring notice to the other party prior to any cancellation or non-renewal.",
+    ],
+    "non_compete": [
+        "During the term of this Agreement and for two years thereafter, the Contractor shall not engage in any competing business.",
+        "Neither party shall, directly or indirectly, solicit or compete with the other party's business during the term hereof.",
+        "The Distributor will not market or sell competing products during the term of this Agreement.",
+    ],
+    "audit_rights": [
+        "Upon reasonable written notice, the auditing Party shall have the right to audit the books and records of the other Party.",
+        "Either party may, no more than once per year, inspect and audit the relevant records of the other party.",
+        "The Company shall have the right to audit Licensee's compliance with this Agreement during normal business hours.",
     ],
 }
 
@@ -245,11 +222,6 @@ class TextRankSummarizer:
         except Exception:
             summary = " ".join(clean[:top_n])
             return summary if len(summary) <= max_chars else summary[: max_chars - 3] + "..."
-
-
-# ============================================================================
-# PROCESSOR CLASS
-# ============================================================================
 
 class TextProcessor:
     """Main text processing engine"""
