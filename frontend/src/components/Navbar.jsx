@@ -1,10 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+
+const API = "http://localhost:8000";
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export default function Navbar() {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isDark, setIsDark] = useState(
     () => document.documentElement.getAttribute("data-theme") === "dark",
   );
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const googleButtonRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.setAttribute(
@@ -13,6 +19,85 @@ export default function Navbar() {
     );
     localStorage.setItem("saraldoc-theme", isDark ? "dark" : "light");
   }, [isDark]);
+
+  // Restore an existing session on page load (cookie set by a previous sign-in).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API}/auth/me`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setUser(data);
+      })
+      .catch(() => {
+        // Backend unreachable or not signed in - treat as signed out.
+      })
+      .finally(() => {
+        if (!cancelled) setAuthLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleCredentialResponse = async (response) => {
+    try {
+      const res = await fetch(`${API}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      if (!res.ok) throw new Error(`Sign-in failed: ${res.status}`);
+      const data = await res.json();
+      setUser(data.user);
+    } catch (err) {
+      console.error("Google sign-in failed:", err);
+    }
+  };
+
+  // Render Google's own Sign In button once the GIS script has loaded and
+  // the user isn't already signed in. The script tag in index.html loads
+  // asynchronously, so we poll briefly for window.google to exist.
+  useEffect(() => {
+    if (user || authLoading) return;
+    if (!GOOGLE_CLIENT_ID) {
+      console.warn(
+        "VITE_GOOGLE_CLIENT_ID is not set - Google Sign-In button will not render.",
+      );
+      return;
+    }
+
+    let attempts = 0;
+    const tryRender = () => {
+      attempts += 1;
+      if (window.google?.accounts?.id && googleButtonRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleCredentialResponse,
+        });
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "outline",
+          size: "medium",
+          shape: "pill",
+          text: "signin",
+        });
+      } else if (attempts < 40) {
+        setTimeout(tryRender, 100);
+      }
+    };
+    tryRender();
+  }, [user, authLoading]);
+
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      setUser(null);
+    }
+  };
 
   return (
     <>
@@ -96,7 +181,7 @@ export default function Navbar() {
 
         .search-container.focused {
           border-color: var(--primary);
-          box-shadow: 0 0 0 3px rgba(168, 73, 46, 0.1);
+          box-shadow: 0 0 0 3px rgba(61, 90, 128, 0.1);
         }
 
         .search-input {
@@ -138,12 +223,19 @@ export default function Navbar() {
           display: flex;
           align-items: center;
           gap: 10px;
+          min-height: 40px;
           padding: 6px 12px;
           background: var(--bg-primary);
           border: 1px solid var(--border);
           border-radius: var(--radius-sm);
           color: var(--text-primary);
           font-size: 0.9rem;
+        }
+
+        .user-profile:has(> div > div[role="button"]) {
+          background: transparent;
+          border: none;
+          padding: 0;
         }
 
         .user-avatar {
@@ -155,6 +247,29 @@ export default function Navbar() {
           align-items: center;
           justify-content: center;
           color: #faf8f3;
+        }
+
+        .user-avatar-img {
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          object-fit: cover;
+        }
+
+        .logout-btn {
+          background: transparent;
+          border: 1px solid var(--border);
+          color: var(--text-secondary);
+          font-size: 0.82rem;
+          padding: 5px 10px;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .logout-btn:hover {
+          border-color: var(--border-active);
+          color: var(--primary);
         }
 
         /* RESPONSIVE */
@@ -199,8 +314,25 @@ export default function Navbar() {
               {isDark ? "☀️" : "🌙"}
             </button>
             <div className="user-profile">
-              <div className="user-avatar">👤</div>
-              <span>You</span>
+              {!authLoading && user ? (
+                <>
+                  {user.picture ? (
+                    <img
+                      src={user.picture}
+                      alt={user.name}
+                      className="user-avatar-img"
+                    />
+                  ) : (
+                    <div className="user-avatar">👤</div>
+                  )}
+                  <span>{user.name || user.email}</span>
+                  <button className="logout-btn" onClick={handleLogout}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <div ref={googleButtonRef} />
+              )}
             </div>
           </div>
         </div>

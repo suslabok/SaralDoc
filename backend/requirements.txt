@@ -1,15 +1,14 @@
-# Core dependencies — this is all a free-tier deployment (Render/Railway
-# free plans, ~512MB RAM) needs. Without spaCy/transformers, the processor
-# still runs fully: TF-IDF clause classification, TextRank summarization,
-# and regex-based obligation/entity extraction all work with zero external
-# model downloads. See requirements-ml.txt for the optional heavier tier.
-
 fastapi==0.141.1
 uvicorn[standard]==0.52.3
 pydantic==2.13.4
 python-multipart==0.0.32
 PyPDF2==3.0.1
 python-docx==1.2.0
+
+# Auth (Google Sign-In)
+python-dotenv==1.0.1
+google-auth==2.56.3
+PyJWT==2.7.0
 
 # Offline NLP (no model download, small footprint)
 scikit-learn==1.9.0

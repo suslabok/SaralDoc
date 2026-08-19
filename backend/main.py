@@ -1,22 +1,21 @@
-"""
-SaralDoc API Server - Main FastAPI Application
-Connects frontend UI to AI text processing pipeline
-"""
-
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+from dotenv import load_dotenv
 import PyPDF2
 from docx import Document
 import json
 import os
+
+load_dotenv()  
 
 # Import AI processor
 import processor as processor_module
 from processor import processor
 from analytics import analytics
 from history_db import history_db
+import auth
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -43,6 +42,10 @@ class AnalyzeRequest(BaseModel):
     text: str
     language: Optional[str] = "auto"
     extract_summary: Optional[bool] = True
+
+class GoogleAuthRequest(BaseModel):
+    """Request model for Google Sign-In"""
+    credential: str  # the ID token from Google Identity Services (frontend)
 
 class ClauseResult(BaseModel):
     """A single clause from document"""
@@ -93,9 +96,40 @@ async def health_check():
     }
 
 # ============================================================================
-# TEXT ANALYSIS ENDPOINT
+# AUTH (Google Sign-In)
 # ============================================================================
 
+@app.post("/auth/google")
+async def google_login(body: GoogleAuthRequest, response: Response):
+    """Frontend sends the Google ID token here after Google Sign-In
+    completes client-side. We verify it with Google, then issue our own
+    session cookie so the frontend never has to handle Google tokens
+    again after this call."""
+    user = auth.verify_google_token(body.credential)
+    session_token = auth.create_session_token(user)
+    auth.set_session_cookie(response, session_token)
+    return {
+        "success": True,
+        "user": {
+            "email": user["email"],
+            "name": user["name"],
+            "picture": user["picture"],
+        },
+    }
+
+@app.get("/auth/me")
+async def get_me(user: dict = Depends(auth.get_current_user)):
+    """Returns the signed-in user's info, or 401 if not signed in."""
+    return {
+        "email": user["email"],
+        "name": user["name"],
+        "picture": user["picture"],
+    }
+
+@app.post("/auth/logout")
+async def logout(response: Response):
+    auth.clear_session_cookie(response)
+    return {"success": True}
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_text(request: AnalyzeRequest):
     """
