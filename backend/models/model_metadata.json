@@ -1,8 +1,12 @@
 {
   "model_type": "TF-IDF + Logistic Regression",
-  "training_samples": 1019,
-  "test_samples": 255,
-  "total_samples": 1274,
+  "training_samples": 1096,
+  "test_samples": 275,
+  "total_samples": 1371,
+  "training_samples_by_language": {
+    "english": 1024,
+    "nepali": 72
+  },
   "classes": [
     "audit_rights",
     "general",
@@ -14,18 +18,28 @@
     "penalty",
     "termination"
   ],
-  "accuracy": 0.898,
-  "per_class_f1": {
-    "audit_rights": 0.8814,
-    "general": 0.6923,
-    "governing_law": 0.9831,
-    "insurance": 0.9677,
-    "liability_cap": 0.8667,
-    "license_grant": 0.9831,
-    "non_compete": 0.8889,
-    "penalty": 0.8947,
-    "termination": 0.8966
+  "accuracy": 0.8691,
+  "accuracy_by_language": {
+    "nepali": {
+      "accuracy": 0.6,
+      "test_samples": 25
+    },
+    "english": {
+      "accuracy": 0.896,
+      "test_samples": 250
+    }
   },
-  "macro_avg_f1": 0.8949,
-  "weighted_avg_f1": 0.8981
+  "per_class_f1": {
+    "audit_rights": 0.8889,
+    "general": 0.6774,
+    "governing_law": 0.9841,
+    "insurance": 0.9697,
+    "liability_cap": 0.8333,
+    "license_grant": 0.9375,
+    "non_compete": 0.8182,
+    "penalty": 0.8293,
+    "termination": 0.8615
+  },
+  "macro_avg_f1": 0.8667,
+  "weighted_avg_f1": 0.8702
 }

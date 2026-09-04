@@ -11,6 +11,11 @@ backend/*.pyc
 backend/.env
 backend/.DS_Store
 backend/datasets/raw/
+backend/models/
+backend/datasets/*.csv
+backend/saraldoc.db
+backend/saraldoc.db-journal
+backend/analysis_history.json
 
 # IDE
 .vscode/

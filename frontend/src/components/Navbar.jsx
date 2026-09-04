@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuth, API } from "../context/AuthContext";
 
-const API = "http://localhost:8000";
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 export default function Navbar() {
@@ -8,8 +8,8 @@ export default function Navbar() {
   const [isDark, setIsDark] = useState(
     () => document.documentElement.getAttribute("data-theme") === "dark",
   );
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { user, loading: authLoading, setUser, logout } = useAuth();
+  const [authError, setAuthError] = useState(null);
   const googleButtonRef = useRef(null);
 
   useEffect(() => {
@@ -20,26 +20,8 @@ export default function Navbar() {
     localStorage.setItem("saraldoc-theme", isDark ? "dark" : "light");
   }, [isDark]);
 
-  // Restore an existing session on page load (cookie set by a previous sign-in).
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`${API}/auth/me`, { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data) setUser(data);
-      })
-      .catch(() => {
-        // Backend unreachable or not signed in - treat as signed out.
-      })
-      .finally(() => {
-        if (!cancelled) setAuthLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const handleCredentialResponse = async (response) => {
+    setAuthError(null);
     try {
       const res = await fetch(`${API}/auth/google`, {
         method: "POST",
@@ -47,11 +29,25 @@ export default function Navbar() {
         credentials: "include",
         body: JSON.stringify({ credential: response.credential }),
       });
-      if (!res.ok) throw new Error(`Sign-in failed: ${res.status}`);
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try {
+          const body = await res.json();
+          if (body.detail) detail = body.detail;
+        } catch {
+          // response wasn't JSON, keep the plain status
+        }
+        throw new Error(detail);
+      }
       const data = await res.json();
       setUser(data.user);
     } catch (err) {
       console.error("Google sign-in failed:", err);
+      setAuthError(
+        err.message === "Failed to fetch"
+          ? `Could not reach the backend at ${API}. Is it running?`
+          : err.message,
+      );
     }
   };
 
@@ -89,14 +85,7 @@ export default function Navbar() {
   }, [user, authLoading]);
 
   const handleLogout = async () => {
-    try {
-      await fetch(`${API}/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } finally {
-      setUser(null);
-    }
+    await logout(); // from AuthContext - hits /auth/logout and clears user everywhere
   };
 
   return (
@@ -232,7 +221,7 @@ export default function Navbar() {
           font-size: 0.9rem;
         }
 
-        .user-profile:has(> div > div[role="button"]) {
+        .user-profile:has(.auth-slot) {
           background: transparent;
           border: none;
           padding: 0;
@@ -254,6 +243,18 @@ export default function Navbar() {
           height: 32px;
           border-radius: 50%;
           object-fit: cover;
+        }
+
+        .auth-slot {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .auth-error {
+          font-size: 0.78rem;
+          color: var(--risk-high);
+          max-width: 220px;
         }
 
         .logout-btn {
@@ -331,7 +332,10 @@ export default function Navbar() {
                   </button>
                 </>
               ) : (
-                <div ref={googleButtonRef} />
+                <div className="auth-slot">
+                  <div ref={googleButtonRef} />
+                  {authError && <span className="auth-error">{authError}</span>}
+                </div>
               )}
             </div>
           </div>

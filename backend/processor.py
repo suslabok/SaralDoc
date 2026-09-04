@@ -108,7 +108,32 @@ CLAUSE_CATEGORIES: Dict[str, List[str]] = {
         "Either party may, no more than once per year, inspect and audit the relevant records of the other party.",
         "The Company shall have the right to audit Licensee's compliance with this Agreement during normal business hours.",
     ],
+    # Nepali seed examples for the cosine-similarity fallback path (used
+    # when no trained model is present). The trained model normally covers
+    # Nepali via datasets/nepali_clause_dataset.csv + trainer.py instead;
+    # these exist so the untrained fallback isn't purely English-only.
+    "governing_law_ne": [
+        "यो सम्झौता नेपालको प्रचलित कानून बमोजिम व्याख्या तथा कार्यान्वयन गरिनेछ।",
+        "यस करारसँग सम्बन्धित कुनै पनि विवाद नेपाल सरकारको अदालतको अधिकार क्षेत्रमा पर्नेछ।",
+    ],
+    "termination_ne": [
+        "कुनै पनि पक्षले तीस दिनको पूर्व लिखित सूचना दिई यो सम्झौता समाप्त गर्न सक्नेछ।",
+        "यो करार दुई वर्षको अवधिको लागि प्रभावकारी रहनेछ र सो अवधि पछि स्वतः समाप्त हुनेछ।",
+    ],
+    "penalty_ne": [
+        "यस सम्झौताको कुनै शर्त उल्लङ्घन गरेमा उल्लङ्घन गर्ने पक्षले करार रकमको दस प्रतिशत हर्जाना तिर्नुपर्नेछ।",
+        "निर्धारित समयभित्र काम सम्पन्न नगरेमा प्रति दिन कुल रकमको ०.५ प्रतिशतका दरले विलम्ब शुल्क लाग्नेछ।",
+    ],
 }
+
+# Map the "_ne" suffixed keys back onto their real category when building
+# the fallback similarity index, so "governing_law_ne" examples still count
+# as "governing_law" for classification purposes.
+for _key in list(CLAUSE_CATEGORIES.keys()):
+    if _key.endswith("_ne"):
+        _base = _key[: -len("_ne")]
+        CLAUSE_CATEGORIES.setdefault(_base, [])
+        CLAUSE_CATEGORIES[_base].extend(CLAUSE_CATEGORIES.pop(_key))
 
 _STOPWORD_SAFE_TOKEN_PATTERN = r"(?u)\b[\w\u0900-\u097F]+\b"
 

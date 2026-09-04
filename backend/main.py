@@ -15,6 +15,7 @@ import processor as processor_module
 from processor import processor
 from analytics import analytics
 from history_db import history_db
+from feedback_db import feedback_db
 import auth
 
 # Initialize FastAPI app
@@ -25,9 +26,17 @@ app = FastAPI(
 )
 
 # Enable CORS for frontend
+# ALLOWED_ORIGINS: comma-separated list, e.g. "https://saraldoc.app,https://www.saraldoc.app"
+# Falls back to the local dev servers so `python main.py` still works out
+# of the box without any .env changes.
+_default_origins = "http://localhost:5173,http://localhost:3000"
+_allowed_origins = [
+    o.strip() for o in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,6 +55,15 @@ class AnalyzeRequest(BaseModel):
 class GoogleAuthRequest(BaseModel):
     """Request model for Google Sign-In"""
     credential: str  # the ID token from Google Identity Services (frontend)
+
+class ClauseCorrectionRequest(BaseModel):
+    """Request model for a user correcting a clause-type prediction"""
+    text: str
+    language: str = "unknown"
+    predicted_type: str
+    corrected_type: str
+    predicted_confidence: Optional[float] = None
+    analysis_id: Optional[int] = None
 
 class ClauseResult(BaseModel):
     """A single clause from document"""
@@ -131,10 +149,15 @@ async def logout(response: Response):
     auth.clear_session_cookie(response)
     return {"success": True}
 @app.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_text(request: AnalyzeRequest):
+async def analyze_text(request: AnalyzeRequest, user: Optional[dict] = Depends(auth.get_current_user_optional)):
     """
     Analyze Nepali or English legal text
     Extracts clauses, obligations, entities, and complexity
+
+    Signing in is optional — analysis works either way — but the result is
+    only saved to /history when signed in (user['sub']), since there's no
+    way to scope an anonymous request to "come back and find this later"
+    without either a login or a separate anonymous-session mechanism.
     """
     try:
         if not request.text or len(request.text.strip()) == 0:
@@ -150,17 +173,18 @@ async def analyze_text(request: AnalyzeRequest):
         complexity = processor.analyze_complexity(request.text)
         readability = processor.analyze_readability(request.text)
         
-        # Save to history
-        history_db.add_analysis({
-            'document_name': 'Text Analysis',
-            'language': result.get('language', 'unknown'),
-            'clauses': result.get('clauses', []),
-            'obligations': result.get('obligations', []),
-            'entities': result.get('entities', []),
-            'complexity_score': complexity,
-            'readability_score': readability,
-            'summary': request.extract_summary and result.get("summary")
-        })
+        # Save to history (only when signed in - see docstring)
+        if user:
+            history_db.add_analysis({
+                'document_name': 'Text Analysis',
+                'language': result.get('language', 'unknown'),
+                'clauses': result.get('clauses', []),
+                'obligations': result.get('obligations', []),
+                'entities': result.get('entities', []),
+                'complexity_score': complexity,
+                'readability_score': readability,
+                'summary': request.extract_summary and result.get("summary")
+            }, user_id=user["sub"])
         
         # Format response
         return AnalyzeResponse(
@@ -245,8 +269,13 @@ def extract_text_from_txt(file_path: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error reading TXT: {str(e)}")
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB — mirrors the frontend's own limit,
+                                      # but enforced server-side since a client
+                                      # can always bypass frontend-only checks
+                                      # by calling the API directly.
+
 @app.post("/analyze-file", response_model=AnalyzeResponse)
-async def analyze_file(file: UploadFile = File(...)):
+async def analyze_file(file: UploadFile = File(...), user: Optional[dict] = Depends(auth.get_current_user_optional)):
     """
     Upload and analyze a legal document
     Supports: PDF, DOCX, TXT
@@ -256,26 +285,34 @@ async def analyze_file(file: UploadFile = File(...)):
         filename = file.filename
         if not filename:
             raise HTTPException(status_code=400, detail="No filename provided")
-        
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in (".pdf", ".docx", ".txt"):
+            raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, or TXT")
+
         # Save uploaded file
         import tempfile
-        import os
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp:
-            content = await file.read()
+
+        content = await file.read()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024*1024)} MB)."
+            )
+        if len(content) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
         
         try:
             # Extract text based on file type
-            if filename.endswith('.pdf'):
+            if ext == '.pdf':
                 text = extract_text_from_pdf(tmp_path)
-            elif filename.endswith('.docx'):
+            elif ext == '.docx':
                 text = extract_text_from_docx(tmp_path)
-            elif filename.endswith('.txt'):
-                text = extract_text_from_txt(tmp_path)
             else:
-                raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, or TXT")
+                text = extract_text_from_txt(tmp_path)
             
             # Analyze extracted text
             result = processor.extract_structure(text)
@@ -284,17 +321,18 @@ async def analyze_file(file: UploadFile = File(...)):
             complexity = processor.analyze_complexity(text)
             readability = processor.analyze_readability(text)
             
-            # Save to history
-            history_db.add_analysis({
-                'document_name': filename,
-                'language': result.get('language', 'unknown'),
-                'clauses': result.get('clauses', []),
-                'obligations': result.get('obligations', []),
-                'entities': result.get('entities', []),
-                'complexity_score': complexity,
-                'readability_score': readability,
-                'summary': result.get("summary", "")
-            })
+            # Save to history (only when signed in - see /analyze docstring)
+            if user:
+                history_db.add_analysis({
+                    'document_name': filename,
+                    'language': result.get('language', 'unknown'),
+                    'clauses': result.get('clauses', []),
+                    'obligations': result.get('obligations', []),
+                    'entities': result.get('entities', []),
+                    'complexity_score': complexity,
+                    'readability_score': readability,
+                    'summary': result.get("summary", "")
+                }, user_id=user["sub"])
             
             return AnalyzeResponse(
                 success=True,
@@ -350,12 +388,16 @@ async def analyze_file(file: UploadFile = File(...)):
 # ============================================================================
 # HISTORY ENDPOINTS
 # ============================================================================
+# Every endpoint below requires a valid session (Depends(auth.get_current_user))
+# and every history_db call is scoped to that user's id. Previously these had
+# no auth check at all — any client could list, read, or bulk-delete every
+# analysis ever run by anyone. See history_db.py's module docstring.
 
 @app.get("/history")
-async def get_history():
-    """Get all analysis history"""
+async def get_history(user: dict = Depends(auth.get_current_user)):
+    """Get the signed-in user's analysis history"""
     try:
-        history = history_db.get_all_history()
+        history = history_db.get_all_history(user_id=user["sub"])
         return {
             "success": True,
             "history": history,
@@ -368,10 +410,10 @@ async def get_history():
         }
 
 @app.get("/history/stats")
-async def get_stats():
-    """Get history statistics"""
+async def get_stats(user: dict = Depends(auth.get_current_user)):
+    """Get history statistics for the signed-in user"""
     try:
-        stats = history_db.get_stats()
+        stats = history_db.get_stats(user_id=user["sub"])
         return {
             "success": True,
             "stats": stats
@@ -383,11 +425,13 @@ async def get_stats():
         }
 
 @app.get("/history/{analysis_id}")
-async def get_analysis(analysis_id: int):
-    """Get specific analysis by ID"""
+async def get_analysis(analysis_id: int, user: dict = Depends(auth.get_current_user)):
+    """Get a specific analysis by ID — only if it belongs to the signed-in user"""
     try:
-        analysis = history_db.get_analysis_by_id(analysis_id)
+        analysis = history_db.get_analysis_by_id(analysis_id, user_id=user["sub"])
         if not analysis:
+            # Deliberately the same message whether the id doesn't exist at
+            # all or belongs to someone else - don't leak which.
             raise ValueError(f"Analysis {analysis_id} not found")
         return {
             "success": True,
@@ -400,10 +444,10 @@ async def get_analysis(analysis_id: int):
         }
 
 @app.delete("/history/{analysis_id}")
-async def delete_analysis(analysis_id: int):
-    """Delete analysis by ID"""
+async def delete_analysis(analysis_id: int, user: dict = Depends(auth.get_current_user)):
+    """Delete an analysis by ID — only if it belongs to the signed-in user"""
     try:
-        if history_db.delete_analysis(analysis_id):
+        if history_db.delete_analysis(analysis_id, user_id=user["sub"]):
             return {
                 "success": True,
                 "message": f"Analysis {analysis_id} deleted"
@@ -417,10 +461,10 @@ async def delete_analysis(analysis_id: int):
         }
 
 @app.delete("/history")
-async def clear_history():
-    """Clear all history"""
+async def clear_history(user: dict = Depends(auth.get_current_user)):
+    """Clear the signed-in user's history (does not touch anyone else's)"""
     try:
-        if history_db.clear_history():
+        if history_db.clear_history(user_id=user["sub"]):
             return {
                 "success": True,
                 "message": "History cleared"
@@ -430,6 +474,82 @@ async def clear_history():
             "success": False,
             "error": str(e)
         }
+
+# ============================================================================
+# FEEDBACK / CLAUSE CORRECTIONS
+# ============================================================================
+# This is how the Nepali (and English) clause classifier is meant to keep
+# improving without more hand-authored/translated seed data: when a user
+# corrects a prediction, it's stored as 'pending'. A human reviews pending
+# corrections and approves the good ones; export_corrections.py then turns
+# approved corrections into datasets/corrections_dataset.csv, which
+# trainer.py automatically includes in the next training run.
+
+@app.post("/feedback/clause-correction")
+async def submit_clause_correction(body: ClauseCorrectionRequest):
+    """Record a user's correction to a clause-type prediction."""
+    try:
+        cc = processor.clause_classifier
+        if cc.using_trained_model:
+            valid_types = set(getattr(cc.trained_model, "classes_", []))
+        else:
+            valid_types = set(getattr(cc, "labels", []))
+        if valid_types and body.corrected_type not in valid_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"corrected_type must be one of: {sorted(valid_types)}"
+            )
+        if not body.text.strip():
+            raise HTTPException(status_code=400, detail="text cannot be empty")
+
+        result = feedback_db.add_correction(
+            text=body.text,
+            language=body.language,
+            predicted_type=body.predicted_type,
+            corrected_type=body.corrected_type,
+            predicted_confidence=body.predicted_confidence,
+            analysis_id=body.analysis_id,
+        )
+        return {"success": True, "correction": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/feedback/corrections")
+async def list_clause_corrections(status: Optional[str] = None):
+    """List stored corrections, optionally filtered by status
+    (pending | approved | rejected)."""
+    try:
+        corrections = feedback_db.list_corrections(status=status)
+        return {"success": True, "corrections": corrections, "total": len(corrections)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/feedback/{correction_id}/approve")
+async def approve_correction(correction_id: int):
+    """Mark a correction as approved so export_corrections.py will include
+    it in the next training run."""
+    if feedback_db.set_status(correction_id, "approved"):
+        return {"success": True}
+    raise HTTPException(status_code=404, detail=f"Correction {correction_id} not found")
+
+@app.post("/feedback/{correction_id}/reject")
+async def reject_correction(correction_id: int):
+    """Mark a correction as rejected (e.g. it was itself wrong) so it's
+    excluded from training."""
+    if feedback_db.set_status(correction_id, "rejected"):
+        return {"success": True}
+    raise HTTPException(status_code=404, detail=f"Correction {correction_id} not found")
+
+@app.get("/feedback/stats")
+async def feedback_stats():
+    """Pending/approved/rejected correction counts, broken down by language —
+    useful for seeing at a glance how much real Nepali signal has accumulated."""
+    try:
+        return {"success": True, "stats": feedback_db.stats()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 # ============================================================================
 # UTILITY ENDPOINTS
@@ -505,7 +625,12 @@ async def root():
             "history_id": "/history/{analysis_id}",
             "delete_history_id": "/history/{analysis_id}",
             "clear_history": "/history",
-            "history_stats": "/history/stats"
+            "history_stats": "/history/stats",
+            "submit_correction": "/feedback/clause-correction",
+            "list_corrections": "/feedback/corrections",
+            "approve_correction": "/feedback/{correction_id}/approve",
+            "reject_correction": "/feedback/{correction_id}/reject",
+            "feedback_stats": "/feedback/stats"
         }
     }
 

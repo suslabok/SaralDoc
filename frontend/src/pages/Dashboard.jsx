@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
 
 // ── All styles inlined ────────────────────────────────────────────────────────
 const css = `
@@ -36,7 +37,7 @@ const css = `
     margin-bottom: 40px;
   }
   .sd-stat {
-    background: white;
+    background: var(--bg-card);
     padding: 26px;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
@@ -72,7 +73,7 @@ const css = `
 
   /* ── Cards ── */
   .sd-card {
-    background: white;
+    background: var(--bg-card);
     padding: 34px;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
@@ -186,7 +187,7 @@ const css = `
   }
   .sd-btn-primary { background: var(--primary); color: #faf8f3; }
   .sd-btn-primary:hover:not(:disabled)   { background: var(--primary-hover); }
-  .sd-btn-secondary { background: white; border: 1px solid var(--primary); color: var(--primary); }
+  .sd-btn-secondary { background: var(--bg-card); border: 1px solid var(--primary); color: var(--primary); }
   .sd-btn-secondary:hover:not(:disabled) { background: var(--primary); color: #faf8f3; }
   .sd-btn-primary:disabled, .sd-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -223,7 +224,7 @@ const css = `
   .sd-result-item:hover { transform: translateX(3px); }
   .sd-result-item.obligation { border-left-color: var(--amber, #c08a34); background: rgba(192,138,52,0.06); }
 
-  .sd-item-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .sd-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .sd-badge {
     padding: 3px 10px; border-radius: 6px;
     font-size: 0.82em; font-weight: 600;
@@ -231,9 +232,43 @@ const css = `
     color: #faf8f3;
   }
   .sd-badge.obl  { background: var(--amber, #c08a34); }
-  .sd-badge.conf { background: rgba(168,73,46,0.1); color: var(--primary); }
+  .sd-badge.type { background: rgba(168,73,46,0.14); color: var(--primary); font-weight: 500; }
+  .sd-badge.conf { background: rgba(168,73,46,0.1); color: var(--primary); margin-left: auto; }
   .sd-item-text  { color: var(--text-primary); line-height: 1.65; font-size: 0.95em; }
   .sd-item-meta  { color: var(--text-secondary); font-size: 0.83em; margin-top: 6px; }
+
+  /* ── Clause-correction feedback ── */
+  .sd-item-feedback { margin-top: 10px; }
+  .sd-feedback-link {
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: var(--text-secondary); font-size: 0.82em; text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .sd-feedback-link:hover { color: var(--primary); }
+  .sd-feedback-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sd-feedback-row select {
+    font-size: 0.85em; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);
+  }
+  .sd-feedback-confirm, .sd-feedback-cancel {
+    font-size: 0.82em; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .sd-feedback-confirm { background: var(--primary); color: #faf8f3; }
+  .sd-feedback-confirm:disabled { opacity: 0.6; cursor: default; }
+  .sd-feedback-cancel { background: transparent; color: var(--text-secondary); border-color: rgba(0,0,0,0.15); }
+  .sd-feedback-msg { font-size: 0.82em; color: var(--text-secondary); }
+  .sd-feedback-msg.error { color: #b3261e; }
+
+  .sd-guest-note {
+    background: rgba(168,73,46,0.08);
+    border: 1px solid rgba(168,73,46,0.2);
+    color: var(--primary);
+    font-size: 0.85em;
+    padding: 8px 14px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
 
   /* ── Entities ── */
   .sd-entity {
@@ -265,7 +300,7 @@ const css = `
   .sd-summary-item .val { color: var(--primary); font-family: var(--font-heading); font-size: 1.4em; font-weight: 600; }
   .sd-score-bar-bg { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 6px; }
   .sd-score-bar    { height: 100%; border-radius: 4px; background: var(--primary); animation: barGrow 0.8s ease-out; }
-  .sd-summary-text { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text-primary); line-height: 1.7; font-size: 0.95em; }
+  .sd-summary-text { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 16px; color: var(--text-primary); line-height: 1.7; font-size: 0.95em; }
 
   .sd-no-results { text-align: center; padding: 30px 20px; color: var(--text-secondary); font-size: 0.93em; }
 
@@ -290,23 +325,110 @@ function StatCard({ icon, value, label }) {
   );
 }
 
-function ResultItem({ item, index }) {
+// Same 9 categories the backend classifier is trained on
+// (backend/build_real_dataset.py + build_nepali_dataset.py).
+const CLAUSE_TYPES = [
+  "governing_law",
+  "termination",
+  "penalty",
+  "license_grant",
+  "liability_cap",
+  "insurance",
+  "non_compete",
+  "audit_rights",
+  "general",
+];
+
+function ResultItem({ item, index, language, apiBase }) {
+  const clauseText = item.clause || item.text || "";
+  const [correcting, setCorrecting] = useState(false);
+  const [correctedType, setCorrectedType] = useState(item.type || "general");
+  const [feedbackState, setFeedbackState] = useState("idle"); // idle | sending | sent | error
+
+  const submitCorrection = async () => {
+    setFeedbackState("sending");
+    try {
+      const res = await fetch(`${apiBase}/feedback/clause-correction`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: clauseText,
+          language: language || "unknown",
+          predicted_type: item.type || "general",
+          corrected_type: correctedType,
+          predicted_confidence: item.confidence ?? null,
+        }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      setFeedbackState("sent");
+      setCorrecting(false);
+    } catch {
+      setFeedbackState("error");
+    }
+  };
+
   return (
     <div className="sd-result-item">
       <div className="sd-item-head">
         <span className="sd-badge">#{index + 1}</span>
+        {item.type && <span className="sd-badge type">{item.type}</span>}
         {item.confidence != null && (
           <span className="sd-badge conf">
             {Math.round(item.confidence * 100)}%
           </span>
         )}
       </div>
-      <div className="sd-item-text">
-        {item.clause || item.text || JSON.stringify(item)}
+      <div className="sd-item-text">{clauseText || JSON.stringify(item)}</div>
+
+      <div className="sd-item-feedback">
+        {feedbackState === "sent" ? (
+          <span className="sd-feedback-msg">
+            Thanks — this helps improve the model.
+          </span>
+        ) : !correcting ? (
+          <button
+            type="button"
+            className="sd-feedback-link"
+            onClick={() => setCorrecting(true)}
+          >
+            Wrong type? Fix it
+          </button>
+        ) : (
+          <div className="sd-feedback-row">
+            <select
+              value={correctedType}
+              onChange={(e) => setCorrectedType(e.target.value)}
+            >
+              {CLAUSE_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="sd-feedback-confirm"
+              disabled={feedbackState === "sending"}
+              onClick={submitCorrection}
+            >
+              {feedbackState === "sending" ? "Saving…" : "Confirm"}
+            </button>
+            <button
+              type="button"
+              className="sd-feedback-cancel"
+              onClick={() => setCorrecting(false)}
+            >
+              Cancel
+            </button>
+            {feedbackState === "error" && (
+              <span className="sd-feedback-msg error">
+                Couldn't save — try again.
+              </span>
+            )}
+          </div>
+        )}
       </div>
-      {item.category && (
-        <div className="sd-item-meta">Category: {item.category}</div>
-      )}
     </div>
   );
 }
@@ -422,9 +544,10 @@ const VALID_TYPES = [
   "text/plain",
 ];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-const API = "http://localhost:8000";
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export default function SaralDoc() {
+  const { user } = useAuth();
   const [inputMethod, setInputMethod] = useState("upload");
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
@@ -488,6 +611,7 @@ export default function SaralDoc() {
       if (inputMethod === "paste") {
         res = await fetch(`${API}/analyze`, {
           method: "POST",
+          credentials: "include", // send the session cookie so, if signed in, this saves to History
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text,
@@ -500,6 +624,7 @@ export default function SaralDoc() {
         form.append("file", file);
         res = await fetch(`${API}/analyze-file`, {
           method: "POST",
+          credentials: "include", // same as above
           body: form,
         });
       }
@@ -720,6 +845,11 @@ export default function SaralDoc() {
             {/* Results */}
             {!loading && results && (
               <>
+                {!user && (
+                  <div className="sd-guest-note">
+                    Sign in to save this analysis to your History.
+                  </div>
+                )}
                 <div className="sd-tabs">
                   {resultTabs.map((t) => (
                     <button
@@ -736,7 +866,13 @@ export default function SaralDoc() {
                   {activeTab === "clauses" &&
                     (results.clauses?.length ? (
                       results.clauses.map((c, i) => (
-                        <ResultItem key={i} item={c} index={i} />
+                        <ResultItem
+                          key={i}
+                          item={c}
+                          index={i}
+                          language={results.language}
+                          apiBase={API}
+                        />
                       ))
                     ) : (
                       <div className="sd-no-results">No clauses found.</div>
